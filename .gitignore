@@ -1,0 +1,36 @@
+# Go build outputs
+/build/
+/bin/
+/dist/
+/tasks/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Coverage / profiling
+*.cover
+*.prof
+coverage.out
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# AI assistants / agents (local-only)
+/CLAUDE.md
+.opencode/
+.opencode.json
+.aider*
+.cursor/
+.cursorrules
+.cursorignore
+.windsurf/
+.cline/
+.continue/
+.github/copilot*
