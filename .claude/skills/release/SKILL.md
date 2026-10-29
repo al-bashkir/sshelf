@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare a new sshelf release. Picks the version, adds the sshelf.spec changelog entry, runs the same checks as release CI plus packaging checks, then guides commit, PR, tag, release verification and the Homebrew tap bump. Use when the user wants to prepare, cut or publish a new sshelf release or version.
+description: Prepare a new sshelf release. Picks the version, adds the sshelf.spec changelog entry, runs the same checks as release CI plus packaging checks, then guides commit, PR, tag and release verification. Use when the user wants to prepare, cut or publish a new sshelf release or version.
 argument-hint: "[X.Y.Z | patch | minor | major]"
 ---
 
@@ -178,10 +178,5 @@ XDG_CONFIG_HOME="$tmp/xdg" "$tmp/sshelf" -h 2>&1 | head -1
 ```
 
 If the run fails before the release is published, the tag stays where it is and cannot move. Fix the problem on `main` through a PR and release the next patch version. Do not try to delete the tag.
-
-## 9. Downstream
-
-- Homebrew: in `~/Projects/GITHUB/al-bashkir/homebrew-tools`, run `/release sshelf`. That repo's skill bumps `Formula/sshelf.rb`.
-- COPR: not automated here. The SRPM needs `VERSION=X.Y.Z` (see the README). Ask the user how they start COPR builds. Do not run `copr-cli` without their OK.
 
 Finish with the release URL: `https://github.com/al-bashkir/sshelf/releases/tag/vX.Y.Z`.
