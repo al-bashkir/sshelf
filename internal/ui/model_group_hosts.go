@@ -357,6 +357,3 @@ func (m *groupHostsModel) handleConnectWithRemoteCommand(remoteCmd string) tea.C
 	}
 	return m.connect(m.hostsToOpen(), m.opts, &m.group, false, remoteCmd)
 }
-
-func (m *groupHostsModel) IsQuitting() bool  { return m.quitting }
-func (m *groupHostsModel) ExecCmd() []string { return m.execCmd }

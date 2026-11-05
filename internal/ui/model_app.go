@@ -166,78 +166,67 @@ func (m *appModel) Init() tea.Cmd {
 	return m.hosts.Init()
 }
 
-func (m *appModel) applyWindowSize(ws tea.WindowSizeMsg) tea.Cmd {
-	m.width = ws.Width
-	m.height = ws.Height
+// screenModel is the model behind one screen and the size it takes from the
+// window.
+type screenModel struct {
+	id    screen
+	model tea.Model                 // nil while the screen is not open
+	size  func(w, h int) (int, int) // nil: the whole window
+}
 
+// screenModels lists every screen in screen order.
+func (m *appModel) screenModels() []screenModel {
+	return []screenModel{
+		{screenHosts, orNil(m.hosts), nil},
+		{screenGroups, orNil(m.groups), nil},
+		{screenGroupForm, orNil(m.form), groupFormModalSize},
+		{screenGroupHosts, orNil(m.gh), nil},
+		{screenHostPicker, orNil(m.picker), pickerModalSize},
+		{screenGroupPicker, orNil(m.gp), pickerModalSize},
+		{screenDefaultsForm, orNil(m.defaultsForm), nil},
+		{screenCustomHost, orNil(m.customHost), customHostModalSize},
+		{screenHostForm, orNil(m.hostForm), hostFormModalSize},
+	}
+}
+
+// screenModel returns the entry for screen s; an unknown s gives no model.
+func (m *appModel) screenModel(s screen) screenModel {
+	for _, sm := range m.screenModels() {
+		if sm.id == s {
+			return sm
+		}
+	}
+	return screenModel{id: s}
+}
+
+// orNil turns a nil model pointer into a nil tea.Model, so callers can test
+// the interface for nil.
+func orNil[T any, P interface {
+	*T
+	tea.Model
+}](p P) tea.Model {
+	if p == nil {
+		return nil
+	}
+	return p
+}
+
+// resize sends sm the size it takes from a w x h window.
+func (sm screenModel) resize(w, h int) tea.Cmd {
+	if sm.size != nil {
+		w, h = sm.size(w, h)
+	}
+	_, cmd := sm.model.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return cmd
+}
+
+func (m *appModel) applyWindowSize(ws tea.WindowSizeMsg) tea.Cmd {
+	m.width, m.height = ws.Width, ws.Height
 	var cmds []tea.Cmd
-	if m.hosts != nil {
-		model, cmd := m.hosts.Update(ws)
-		if hm, ok := model.(*hostsModel); ok {
-			m.hosts = hm
+	for _, sm := range m.screenModels() {
+		if sm.model != nil {
+			cmds = append(cmds, sm.resize(ws.Width, ws.Height))
 		}
-		cmds = append(cmds, cmd)
-	}
-	if m.groups != nil {
-		model, cmd := m.groups.Update(ws)
-		if gm, ok := model.(*groupsModel); ok {
-			m.groups = gm
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.form != nil {
-		mw, mh := groupFormModalSize(ws.Width, ws.Height)
-		model, cmd := m.form.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		if fm, ok := model.(*groupFormModel); ok {
-			m.form = fm
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.gh != nil {
-		model, cmd := m.gh.Update(ws)
-		if gh, ok := model.(*groupHostsModel); ok {
-			m.gh = gh
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.picker != nil {
-		mw, mh := pickerModalSize(ws.Width, ws.Height)
-		model, cmd := m.picker.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		if pm, ok := model.(*hostPickerModel); ok {
-			m.picker = pm
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.gp != nil {
-		mw, mh := pickerModalSize(ws.Width, ws.Height)
-		model, cmd := m.gp.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		if gm, ok := model.(*groupPickerModel); ok {
-			m.gp = gm
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.defaultsForm != nil {
-		model, cmd := m.defaultsForm.Update(ws)
-		if dm, ok := model.(*defaultsFormModel); ok {
-			m.defaultsForm = dm
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.customHost != nil {
-		mw, mh := customHostModalSize(ws.Width, ws.Height)
-		model, cmd := m.customHost.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		if cm, ok := model.(*customHostModel); ok {
-			m.customHost = cm
-		}
-		cmds = append(cmds, cmd)
-	}
-	if m.hostForm != nil {
-		mw, mh := hostFormModalSize(ws.Width, ws.Height)
-		model, cmd := m.hostForm.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		if hm, ok := model.(*hostFormModel); ok {
-			m.hostForm = hm
-		}
-		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
 }
@@ -371,13 +360,13 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.form = newGroupFormModel(msg.index, g, m.opts.Config.Defaults)
 		m.form.parentCrumb = "Groups"
-		m.sizeOnOpen(m.form, groupFormModalSize)
+		m.sizeOnOpen(screenGroupForm)
 		m.screen = screenGroupForm
 		return m, nil
 	case openGroupFormPrefillMsg:
 		m.form = newGroupFormModel(-1, msg.group, m.opts.Config.Defaults)
 		m.form.parentCrumb = "Groups"
-		m.sizeOnOpen(m.form, groupFormModalSize)
+		m.sizeOnOpen(screenGroupForm)
 		m.screen = screenGroupForm
 		return m, nil
 	case groupFormCancelMsg:
@@ -407,13 +396,13 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.gh = newGroupHostsModel(m.opts, msg.index)
-		m.sizeOnOpen(m.gh, nil)
+		m.sizeOnOpen(screenGroupHosts)
 		m.screen = screenGroupHosts
 		return m, nil
 	case openHostPickerMsg:
 		m.picker = newHostPickerModel(m.opts)
 		m.picker.parentCrumb = m.breadcrumb()
-		m.sizeOnOpen(m.picker, pickerModalSize)
+		m.sizeOnOpen(screenHostPicker)
 		m.returnTo = msg.returnTo
 		m.returnGroupIndex = msg.groupIndex
 		m.screen = screenHostPicker
@@ -424,13 +413,13 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gp.hosts = append([]string(nil), m.gpHosts...)
 		m.gp.parentCrumb = m.breadcrumb()
 		m.gpReturnTo = screenHosts
-		m.sizeOnOpen(m.gp, pickerModalSize)
+		m.sizeOnOpen(screenGroupPicker)
 		m.screen = screenGroupPicker
 		return m, nil
 	case openDefaultsFormMsg:
 		m.defaultsForm = newDefaultsFormModel(m.opts.Config.Defaults, m.opts.Config.Defaults.ConfirmQuit)
 		m.defaultsReturnTo = msg.returnTo
-		m.sizeOnOpen(m.defaultsForm, nil)
+		m.sizeOnOpen(screenDefaultsForm)
 		m.screen = screenDefaultsForm
 		return m, nil
 	case defaultsFormCancelMsg:
@@ -476,7 +465,7 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.customHost.parentCrumb = crumb
-		m.sizeOnOpen(m.customHost, customHostModalSize)
+		m.sizeOnOpen(screenCustomHost)
 		m.screen = screenCustomHost
 		return m, nil
 	case openHostFormMsg:
@@ -484,14 +473,14 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hostForm = newHostFormModel(idx, hc, m.opts.Config.Defaults)
 		m.hostForm.parentCrumb = m.breadcrumb()
 		m.hostFormReturnTo = msg.returnTo
-		m.sizeOnOpen(m.hostForm, hostFormModalSize)
+		m.sizeOnOpen(screenHostForm)
 		m.screen = screenHostForm
 		return m, nil
 	case openHostFormPrefillMsg:
 		m.hostForm = newHostFormModel(-1, msg.host, m.opts.Config.Defaults)
 		m.hostForm.parentCrumb = m.breadcrumb()
 		m.hostFormReturnTo = msg.returnTo
-		m.sizeOnOpen(m.hostForm, hostFormModalSize)
+		m.sizeOnOpen(screenHostForm)
 		m.screen = screenHostForm
 		return m, nil
 	case customHostCancelMsg:
@@ -508,7 +497,7 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gp.hosts = append([]string(nil), m.gpHosts...)
 		m.gp.parentCrumb = m.breadcrumb()
 		m.gpReturnTo = msg.returnTo
-		m.sizeOnOpen(m.gp, pickerModalSize)
+		m.sizeOnOpen(screenGroupPicker)
 		m.customHost = nil
 		m.screen = screenGroupPicker
 		return m, nil
@@ -543,7 +532,7 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.returnTo == screenGroupHosts {
 			m.gh = newGroupHostsModel(m.opts, msg.groupIndex)
-			m.sizeOnOpen(m.gh, nil)
+			m.sizeOnOpen(screenGroupHosts)
 		}
 		m.toastOn(msg.returnTo, toast{text: fmt.Sprintf("added %d", added), level: toastOK})
 		m.customHost = nil
@@ -579,7 +568,7 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = m.returnTo
 		if m.screen == screenGroupHosts {
 			m.gh = newGroupHostsModel(m.opts, m.returnGroupIndex)
-			m.sizeOnOpen(m.gh, nil)
+			m.sizeOnOpen(screenGroupHosts)
 		}
 		m.toastOn(m.returnTo, toast{text: fmt.Sprintf("added %d", added), level: toastOK})
 		return m, nil
@@ -592,7 +581,7 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.screen == screenGroupHosts {
 			m.gh = newGroupHostsModel(m.opts, msg.groupIndex)
-			m.sizeOnOpen(m.gh, nil)
+			m.sizeOnOpen(screenGroupHosts)
 			m.gh.toast = toast{text: fmt.Sprintf("removed %d", len(msg.hosts)), level: toastOK}
 		}
 		return m, nil
@@ -635,88 +624,36 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch m.screen {
-	case screenHosts:
-		model, cmd := m.hosts.Update(msg)
-		if hm, ok := model.(*hostsModel); ok {
-			m.hosts = hm
-			if len(hm.execCmd) != 0 {
-				m.execCmd = hm.execCmd
-				return m, tea.Quit
-			}
-			if hm.quitting {
-				m.quitting = true
-				return m, tea.Quit
-			}
-		}
-		return m, cmd
-	case screenGroups:
-		model, cmd := m.groups.Update(msg)
-		if gm, ok := model.(*groupsModel); ok {
-			m.groups = gm
-			if len(gm.execCmd) != 0 {
-				m.execCmd = gm.execCmd
-				return m, tea.Quit
-			}
-			if gm.quitting {
-				m.quitting = true
-				return m, tea.Quit
-			}
-		}
-		return m, cmd
-	case screenGroupForm:
-		model, cmd := m.form.Update(msg)
-		if fm, ok := model.(*groupFormModel); ok {
-			m.form = fm
-		}
-		return m, cmd
-	case screenGroupHosts:
-		model, cmd := m.gh.Update(msg)
-		if gh, ok := model.(*groupHostsModel); ok {
-			m.gh = gh
-			if len(gh.execCmd) != 0 {
-				m.execCmd = gh.execCmd
-				return m, tea.Quit
-			}
-			if gh.quitting {
-				m.quitting = true
-				return m, tea.Quit
-			}
-		}
-		return m, cmd
-	case screenHostPicker:
-		model, cmd := m.picker.Update(msg)
-		if pm, ok := model.(*hostPickerModel); ok {
-			m.picker = pm
-		}
-		return m, cmd
-	case screenGroupPicker:
-		model, cmd := m.gp.Update(msg)
-		if gm, ok := model.(*groupPickerModel); ok {
-			m.gp = gm
-		}
-		return m, cmd
-	case screenDefaultsForm:
-		model, cmd := m.defaultsForm.Update(msg)
-		if dm, ok := model.(*defaultsFormModel); ok {
-			m.defaultsForm = dm
-		}
-		return m, cmd
-	case screenCustomHost:
-		model, cmd := m.customHost.Update(msg)
-		if cm, ok := model.(*customHostModel); ok {
-			m.customHost = cm
-		}
-		return m, cmd
-	case screenHostForm:
-		model, cmd := m.hostForm.Update(msg)
-		if hm, ok := model.(*hostFormModel); ok {
-			m.hostForm = hm
-		}
-		return m, cmd
-	default:
-		return m, nil
+	return m, m.forward(msg)
+}
+
+// forward sends msg to the current screen. Every screen's Update changes
+// its model in place. A list screen that asks to exec ssh or to quit ends
+// the program.
+func (m *appModel) forward(msg tea.Msg) tea.Cmd {
+	top := m.screenModel(m.screen).model
+	if top == nil {
+		return nil
 	}
+	_, cmd := top.Update(msg)
+	if st, ok := top.(exitState); ok {
+		return m.exitOr(st, cmd)
+	}
+	return cmd
+}
+
+// exitOr ends the program when st asked to exec ssh or to quit; otherwise
+// it returns cmd.
+func (m *appModel) exitOr(st exitState, cmd tea.Cmd) tea.Cmd {
+	if x := st.ExecCmd(); len(x) != 0 {
+		m.execCmd = x
+		return tea.Quit
+	}
+	if st.IsQuitting() {
+		m.quitting = true
+		return tea.Quit
+	}
+	return cmd
 }
 
 func (m *appModel) View() string {
@@ -782,17 +719,12 @@ func upsert[T any](items []T, index int, item T, key func(T) string, kind string
 	return out, nil
 }
 
-// sizeOnOpen sends a freshly opened screen its first size. size maps the window
-// to the screen's modal size; nil means the full window.
-func (m *appModel) sizeOnOpen(c tea.Model, size func(w, h int) (int, int)) {
+// sizeOnOpen sends the freshly opened screen s its first size.
+func (m *appModel) sizeOnOpen(s screen) {
 	if m.width <= 0 || m.height <= 0 {
 		return
 	}
-	w, h := m.width, m.height
-	if size != nil {
-		w, h = size(w, h)
-	}
-	_, _ = c.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	_ = m.screenModel(s).resize(m.width, m.height)
 }
 
 // toastOn shows t on the list screen s.
@@ -883,7 +815,7 @@ func (m *appModel) saveDefaults(d config.Defaults) error {
 		if m.picker != nil {
 			// Recreate to refresh list source.
 			m.picker = newHostPickerModel(m.opts)
-			m.sizeOnOpen(m.picker, pickerModalSize)
+			m.sizeOnOpen(screenHostPicker)
 		}
 	}
 	if m.hosts != nil {

@@ -463,6 +463,3 @@ func (m *groupsModel) connectAllCmd(oneWindow bool, remoteCmd string) tea.Cmd {
 	}
 	return m.connect(append([]string(nil), g.Hosts...), m.opts, &g, oneWindow, remoteCmd)
 }
-
-func (m *groupsModel) IsQuitting() bool  { return m.quitting }
-func (m *groupsModel) ExecCmd() []string { return m.execCmd }

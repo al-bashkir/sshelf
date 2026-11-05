@@ -23,6 +23,11 @@ type connectActions struct {
 	pendingConnectFn    func() tea.Cmd
 }
 
+// IsQuitting and ExecCmd make every list screen an exitState, so the app
+// sees when one asks to quit or to exec ssh.
+func (c *connectActions) IsQuitting() bool  { return c.quitting }
+func (c *connectActions) ExecCmd() []string { return c.execCmd }
+
 func connectThreshold(d config.Defaults) int {
 	if d.ConnectConfirmThreshold < 0 {
 		return 5
