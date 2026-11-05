@@ -11,6 +11,12 @@ For user-facing behavior and keybindings see [UI spec](../functional/ui.md).
   (`internal/ui/list_screen.go`): the shared list, search, help, command
   prompt and connect state, and the shared `update` (size, keys, toasts).
   Each screen adds its own `overlayKey` and `keyActions` table.
+- Form screens (host form, group form, Settings) embed `formScreen`
+  (`internal/ui/form_screen.go`): the form, size, toast and the border
+  format sub-modal, and the shared `update` (sub-modal, unsaved-changes
+  question, insert mode and picker, Ctrl+S, Esc). Each screen passes
+  `formHooks`: its save message, cancel message and, when it has them,
+  its own keys and border format sub-modal.
 - Shared rendering helpers/styles:
   - Layout tabs box: `internal/ui/tab_box.go`
   - Frame + styles + accent: `internal/ui/styles.go`

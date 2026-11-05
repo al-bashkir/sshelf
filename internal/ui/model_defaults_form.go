@@ -260,37 +260,22 @@ func cleanBorderFormats(fmts []string) []string {
 // ---------------------------------------------------------------------------
 
 type defaultsFormModel struct {
-	form     formModel
-	defaults config.Defaults // preserved for border-format sub-modal
-
-	width  int
-	height int
-
-	borderPicker *paneBorderFormatsModel
-
-	toast toast
-
-	keymap keyMap
+	formScreen
+	defaults config.Defaults // the base for save, with the custom border formats
 
 	confirmQuitEnabled bool
 	confirmQuit        bool
-}
-
-func (m *defaultsFormModel) refreshAccentStyles() {
-	m.form.applyFocusStyles()
-	if m.borderPicker != nil {
-		m.borderPicker.refreshAccentStyles()
-	}
 }
 
 func newDefaultsFormModel(d config.Defaults, confirmQuitEnabled bool) *defaultsFormModel {
 	values := defaultsToValues(d)
 	fm := newFormModel(settingsSchema(), values, defaultsFormLabelWidth, d.ShowFieldHelp)
 
+	s := newFormScreen(fm)
+	s.parentCrumb = "Settings"
 	return &defaultsFormModel{
-		form:               fm,
+		formScreen:         s,
 		defaults:           d,
-		keymap:             defaultKeyMap(),
 		confirmQuitEnabled: confirmQuitEnabled,
 	}
 }
@@ -302,127 +287,51 @@ func (m *defaultsFormModel) Init() tea.Cmd { return nil }
 // ---------------------------------------------------------------------------
 
 func (m *defaultsFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	// Sub-modal messages.
-	case paneBorderFormatsCancelMsg:
-		m.borderPicker = nil
-		return m, nil
-	case paneBorderFormatsDoneMsg:
-		m.defaults.PaneBorderFmt = strings.TrimSpace(msg.value)
-		m.defaults.PaneBorderFmts = append([]string(nil), msg.customFmts...)
-		m.form.setValue("border_fmt", m.defaults.PaneBorderFmt)
-		m.borderPicker = nil
-		return m, nil
-
-	// Resize.
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.form.handleResize(msg.Width, msg.Height)
-		if m.borderPicker != nil {
-			mw, mh := pickerModalSize(msg.Width, msg.Height)
-			_, _ = m.borderPicker.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		}
-		return m, nil
-
-	// Key handling.
-	case tea.KeyMsg:
-		// Sub-modal intercepts all keys.
-		if m.borderPicker != nil {
-			model, cmd := m.borderPicker.Update(msg)
-			if pm, ok := model.(*paneBorderFormatsModel); ok {
-				m.borderPicker = pm
-			}
-			return m, cmd
-		}
-
-		// Confirm-quit dialog.
-		if m.confirmQuit {
-			switch msg.String() {
-			case "y", "Y", "enter":
-				return m, tea.Quit
-			case "n", "N", "esc":
-				m.confirmQuit = false
-				m.toast = toast{}
-				return m, nil
-			default:
-				return m, nil
-			}
-		}
-
-		// Confirm-discard dialog.
-		if m.form.askingDiscard() {
-			return m, m.form.handleDiscardKey(msg, &m.toast)
-		}
-
-		// In insert mode or picker popup, delegate everything to the form.
-		if m.form.editing || m.form.picker != nil {
-			handled, cmd := m.form.handleKey(msg)
-			if handled {
-				// Live-preview: sync after picker/edit confirms.
-				m.form.showFieldHelp = m.form.values["show_field_help"] != "no"
-				return m, cmd
-			}
-		}
-
-		if key.Matches(msg, m.keymap.HostsTab) || key.Matches(msg, m.keymap.GroupsTab) {
-			to := screenHosts
-			if key.Matches(msg, m.keymap.GroupsTab) {
-				to = screenGroups
-			}
-			return m, m.form.exitOrAsk(func() tea.Msg { return switchScreenMsg{to: to} }, &m.toast)
-		}
-
-		// Save (Ctrl+S).
-		if key.Matches(msg, m.keymap.Save) {
-			m.form.exitEdit()
-			m.toast = toast{}
-			d, err := applySettingsValues(m.form.values, m.defaults)
-			if err != nil {
-				m.toast = toast{text: err.Error(), level: toastErr}
-				return m, nil
-			}
-			return m, func() tea.Msg { return defaultsFormSaveMsg{defaults: d} }
-		}
-
-		// Quit.
-		if key.Matches(msg, m.keymap.Quit) {
-			if !m.confirmQuitEnabled {
-				return m, m.form.exitOrAsk(tea.Quit, &m.toast)
-			}
-			m.confirmQuit = true
-			m.toast = toast{text: "quit? (y/n)", level: toastWarn}
-			return m, nil
-		}
-
-		// Cancel (Esc) — with unsaved-changes guard.
-		if key.Matches(msg, m.keymap.Esc) {
-			return m, m.form.exitOrAsk(func() tea.Msg { return defaultsFormCancelMsg{} }, &m.toast)
-		}
-
-		// Sub-modal activation for border format field.
-		fk := m.form.focusedFieldKey()
-		s := msg.String()
-		if fk == "border_fmt" && (s == "enter" || s == " " || s == "l") {
-			mw, mh := pickerModalSize(m.width, m.height)
-			m.borderPicker = newPaneBorderFormatsModel(m.defaults, m.defaults.PaneBorderFmt, false, true)
-			m.borderPicker.parentCrumb = "Settings"
-			if mw > 0 && mh > 0 {
-				_, _ = m.borderPicker.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-			}
-			return m, nil
-		}
-
-		// Generic form key handling.
-		handled, cmd := m.form.handleKey(msg)
-		if handled {
-			// Live-preview: sync showFieldHelp toggle.
-			m.form.showFieldHelp = m.form.values["show_field_help"] != "no"
-			return m, cmd
-		}
+	if done, ok := msg.(paneBorderFormatsDoneMsg); ok {
+		m.defaults.PaneBorderFmts = append([]string(nil), done.customFmts...)
 	}
+	cmd := m.update(msg, formHooks{
+		save: m.saveMsg, cancel: defaultsFormCancelMsg{}, ownKey: m.ownKey, borders: m.borders,
+	})
+	// Live preview of the field help choice.
+	m.form.showFieldHelp = m.form.value("show_field_help") != "no"
+	return m, cmd
+}
 
-	return m, nil
+func (m *defaultsFormModel) saveMsg() (tea.Msg, error) {
+	d, err := applySettingsValues(m.form.values, m.defaults)
+	return defaultsFormSaveMsg{defaults: d}, err
+}
+
+// borders opens the formats with no inherit choice. Settings can add and
+// delete formats.
+func (m *defaultsFormModel) borders() *paneBorderFormatsModel {
+	return newPaneBorderFormatsModel(m.defaults, m.form.value("border_fmt"), false, true)
+}
+
+// ownKey handles the quit question, the tab keys and q.
+func (m *defaultsFormModel) ownKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if handled, cmd := handleConfirmQuit(msg, &m.confirmQuit, &m.toast, nil, true); handled {
+		return cmd, true
+	}
+	switch {
+	case key.Matches(msg, m.keymap.HostsTab):
+		return m.form.exitOrAsk(msgCmd(switchScreenMsg{to: screenHosts}), &m.toast), true
+	case key.Matches(msg, m.keymap.GroupsTab):
+		return m.form.exitOrAsk(msgCmd(switchScreenMsg{to: screenGroups}), &m.toast), true
+	case key.Matches(msg, m.keymap.Quit):
+		return m.quit(), true
+	}
+	return nil, false
+}
+
+// quit asks first when confirm-quit is on; otherwise only unsaved changes
+// stop it.
+func (m *defaultsFormModel) quit() tea.Cmd {
+	if m.confirmQuitEnabled {
+		return askQuit(true, &m.confirmQuit, &m.toast, nil)
+	}
+	return m.form.exitOrAsk(tea.Quit, &m.toast)
 }
 
 // ---------------------------------------------------------------------------

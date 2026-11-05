@@ -6,7 +6,6 @@ import (
 
 	"github.com/al-bashkir/sshelf/internal/config"
 
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -124,27 +123,10 @@ func applyGroupValues(values map[string]string, base config.Group) (config.Group
 // ---------------------------------------------------------------------------
 
 type groupFormModel struct {
-	form        formModel
-	index       int
-	group       config.Group
-	defs        config.Defaults
-	parentCrumb string
-
-	width  int
-	height int
-
-	borderPicker *paneBorderFormatsModel
-
-	toast toast
-
-	keymap keyMap
-}
-
-func (m *groupFormModel) refreshAccentStyles() {
-	m.form.applyFocusStyles()
-	if m.borderPicker != nil {
-		m.borderPicker.refreshAccentStyles()
-	}
+	formScreen
+	index int
+	group config.Group
+	defs  config.Defaults // the custom border formats to choose from
 }
 
 func newGroupFormModel(index int, g config.Group, defs config.Defaults) *groupFormModel {
@@ -157,11 +139,10 @@ func newGroupFormModel(index int, g config.Group, defs config.Defaults) *groupFo
 	fm := newFormModel(groupSchema(defs), values, modalFormLabelWidth, defs.ShowFieldHelp)
 
 	return &groupFormModel{
-		form:   fm,
-		index:  index,
-		group:  g,
-		defs:   defs,
-		keymap: defaultKeyMap(),
+		formScreen: newFormScreen(fm),
+		index:      index,
+		group:      g,
+		defs:       defs,
 	}
 }
 
@@ -172,84 +153,18 @@ func newGroupFormModel(index int, g config.Group, defs config.Defaults) *groupFo
 func (m *groupFormModel) Init() tea.Cmd { return nil }
 
 func (m *groupFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case paneBorderFormatsCancelMsg:
-		m.borderPicker = nil
-		return m, nil
-	case paneBorderFormatsDoneMsg:
-		m.group.PaneBorderFmt = strings.TrimSpace(msg.value)
-		m.form.setValue("border_fmt", m.group.PaneBorderFmt)
-		m.borderPicker = nil
-		return m, nil
+	return m, m.update(msg, formHooks{save: m.saveMsg, cancel: groupFormCancelMsg{}, borders: m.borders})
+}
 
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.form.handleResize(msg.Width, msg.Height)
-		if m.borderPicker != nil {
-			mw, mh := pickerModalSize(msg.Width, msg.Height)
-			_, _ = m.borderPicker.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-		}
-		return m, nil
+func (m *groupFormModel) saveMsg() (tea.Msg, error) {
+	g, err := applyGroupValues(m.form.values, m.group)
+	return groupFormSaveMsg{index: m.index, group: g}, err
+}
 
-	case tea.KeyMsg:
-		if m.borderPicker != nil {
-			model, cmd := m.borderPicker.Update(msg)
-			if pm, ok := model.(*paneBorderFormatsModel); ok {
-				m.borderPicker = pm
-			}
-			return m, cmd
-		}
-
-		if m.form.askingDiscard() {
-			return m, m.form.handleDiscardKey(msg, &m.toast)
-		}
-
-		// In insert mode or picker popup, delegate to form first.
-		if m.form.editing || m.form.picker != nil {
-			handled, cmd := m.form.handleKey(msg)
-			if handled {
-				return m, cmd
-			}
-		}
-
-		// Save.
-		if key.Matches(msg, m.keymap.Save) {
-			m.form.exitEdit()
-			m.toast = toast{}
-			g, err := applyGroupValues(m.form.values, m.group)
-			if err != nil {
-				m.toast = toast{text: err.Error(), level: toastErr}
-				return m, nil
-			}
-			return m, func() tea.Msg { return groupFormSaveMsg{index: m.index, group: g} }
-		}
-
-		if key.Matches(msg, m.keymap.Esc) {
-			return m, m.form.exitOrAsk(func() tea.Msg { return groupFormCancelMsg{} }, &m.toast)
-		}
-
-		// Sub-modal activation for border format.
-		fk := m.form.focusedFieldKey()
-		s := msg.String()
-		if fk == "border_fmt" && (s == "enter" || s == " " || s == "l") {
-			mw, mh := pickerModalSize(m.width, m.height)
-			m.borderPicker = newPaneBorderFormatsModel(m.defs, m.group.PaneBorderFmt, true, false)
-			m.borderPicker.parentCrumb = m.parentCrumb
-			if mw > 0 && mh > 0 {
-				_, _ = m.borderPicker.Update(tea.WindowSizeMsg{Width: mw, Height: mh})
-			}
-			return m, nil
-		}
-
-		// Generic form key handling.
-		handled, cmd := m.form.handleKey(msg)
-		if handled {
-			return m, cmd
-		}
-	}
-
-	return m, nil
+// borders opens the formats from the defaults, with an inherit choice. A
+// group cannot add or delete formats.
+func (m *groupFormModel) borders() *paneBorderFormatsModel {
+	return newPaneBorderFormatsModel(m.defs, m.form.value("border_fmt"), true, false)
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,6 @@ import (
 
 	"github.com/al-bashkir/sshelf/internal/config"
 
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -82,21 +81,9 @@ func applyHostValues(values map[string]string, base config.Host) (config.Host, e
 // ---------------------------------------------------------------------------
 
 type hostFormModel struct {
-	form        formModel
-	index       int
-	host        config.Host
-	parentCrumb string
-
-	width  int
-	height int
-
-	toast toast
-
-	keymap keyMap
-}
-
-func (m *hostFormModel) refreshAccentStyles() {
-	m.form.applyFocusStyles()
+	formScreen
+	index int
+	host  config.Host
 }
 
 func newHostFormModel(index int, h config.Host, defs config.Defaults) *hostFormModel {
@@ -104,10 +91,9 @@ func newHostFormModel(index int, h config.Host, defs config.Defaults) *hostFormM
 	fm := newFormModel(hostSchema(defs), values, modalFormLabelWidth, defs.ShowFieldHelp)
 
 	return &hostFormModel{
-		form:   fm,
-		index:  index,
-		host:   h,
-		keymap: defaultKeyMap(),
+		formScreen: newFormScreen(fm),
+		index:      index,
+		host:       h,
 	}
 }
 
@@ -118,50 +104,12 @@ func newHostFormModel(index int, h config.Host, defs config.Defaults) *hostFormM
 func (m *hostFormModel) Init() tea.Cmd { return nil }
 
 func (m *hostFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.form.handleResize(msg.Width, msg.Height)
-		return m, nil
+	return m, m.update(msg, formHooks{save: m.saveMsg, cancel: hostFormCancelMsg{}})
+}
 
-	case tea.KeyMsg:
-		if m.form.askingDiscard() {
-			return m, m.form.handleDiscardKey(msg, &m.toast)
-		}
-
-		// Insert mode — delegate to form first.
-		if m.form.editing {
-			handled, cmd := m.form.handleKey(msg)
-			if handled {
-				return m, cmd
-			}
-		}
-
-		// Save.
-		if key.Matches(msg, m.keymap.Save) {
-			m.form.exitEdit()
-			m.toast = toast{}
-			h, err := applyHostValues(m.form.values, m.host)
-			if err != nil {
-				m.toast = toast{text: err.Error(), level: toastErr}
-				return m, nil
-			}
-			return m, func() tea.Msg { return hostFormSaveMsg{index: m.index, host: h} }
-		}
-
-		if key.Matches(msg, m.keymap.Esc) {
-			return m, m.form.exitOrAsk(func() tea.Msg { return hostFormCancelMsg{} }, &m.toast)
-		}
-
-		// Generic form key handling.
-		handled, cmd := m.form.handleKey(msg)
-		if handled {
-			return m, cmd
-		}
-	}
-
-	return m, nil
+func (m *hostFormModel) saveMsg() (tea.Msg, error) {
+	h, err := applyHostValues(m.form.values, m.host)
+	return hostFormSaveMsg{index: m.index, host: h}, err
 }
 
 // ---------------------------------------------------------------------------
