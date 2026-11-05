@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -141,6 +142,10 @@ func TestGroupsView(t *testing.T) {
 	m = groupsScreen(nil)
 	on(m, "j", "d")
 	screenShows(t, m, []string{`Delete "empty" (0)?`})
+	m = groupsScreen(nil)
+	on(m, "j", "j", "d") // web, the first group in the inventory
+	screenShows(t, m, []string{`Delete "web" (1)?`})
+	questionCentered(t, m, "Delete group?", 0)
 
 	m = groupsScreen(func(o *Options) { o.Inventory.Groups = nil })
 	screenShows(t, m, []string{"No groups yet.", "n — create a new group"})
@@ -176,6 +181,7 @@ func TestGroupHostsView(t *testing.T) {
 	m = groupHostsScreen(0, nil)
 	on(m, "d")
 	screenShows(t, m, []string{"Groups > prod", "Remove hosts?", "from prod"}, "3 hosts", "O pane")
+	questionCentered(t, m, "Remove hosts?", -1) // a row high: it leaves room for a footer it lacks
 
 	screenShows(t, groupHostsScreen(1, nil), []string{"Groups > empty", "No hosts in this group.", "a — add hosts"})
 	m = groupHostsScreen(0, nil)
@@ -207,5 +213,28 @@ func TestListViewsConnectQuestion(t *testing.T) {
 				t.Fatalf("%s: line %d is %d wide in a 40-wide window", c.name, i, w)
 			}
 		}
+	}
+}
+
+// questionCentered fails unless the box titled title sits in the middle of
+// the list area (rows 5 to the last but one) at offset rows from the exact
+// middle (negative is higher), and across the width give or take a column.
+func questionCentered(t *testing.T, m tea.Model, title string, offset int) {
+	t.Helper()
+	lines := strings.Split(plainView(m), "\n")
+	top := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, title) })
+	if top < 0 {
+		t.Fatalf("no %q box:\n%s", title, plainView(m))
+	}
+	bottom := top + slices.IndexFunc(lines[top:], func(l string) bool {
+		return strings.Contains(l, "└") && !strings.HasPrefix(l, "└")
+	})
+	if d := (top - 5) - (len(lines) - 2 - bottom); d/2 != offset {
+		t.Fatalf("%q box rows %d-%d: offset %d, want %d:\n%s", title, top, bottom, d/2, offset, plainView(m))
+	}
+	row := []rune(lines[top])
+	left, right := slices.Index(row, '┌')-1, len(row)-2-slices.Index(row, '┐')
+	if d := left - right; slices.Index(row, '┐') < 0 || d < -1 || d > 1 {
+		t.Fatalf("%q box is off the middle by %d columns:\n%s", title, d, plainView(m))
 	}
 }
