@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -73,11 +74,7 @@ type paneBorderFormatsModel struct {
 }
 
 func (m *paneBorderFormatsModel) refreshAccentStyles() {
-	if m.adding {
-		setSearchFocused(&m.addInput, true)
-	} else {
-		setSearchFocused(&m.addInput, false)
-	}
+	setSearchFocused(&m.addInput, m.adding)
 }
 
 func newPaneBorderFormatsModel(defs config.Defaults, selected string, includeInherit bool, allowEdit bool) *paneBorderFormatsModel {
@@ -86,38 +83,17 @@ func newPaneBorderFormatsModel(defs config.Defaults, selected string, includeInh
 		selected = config.DefaultPaneBorderFormat
 	}
 
-	// Ensure the currently selected value is present in the list (for group overrides
-	// that might reference a custom format not present in defaults).
-	defsForRows := defs
-	if selected != "" {
-		defsForRows.PaneBorderFmt = selected
-	}
-
-	rows := buildPaneBorderFormatRows(defsForRows, includeInherit)
-	items := make([]list.Item, 0, len(rows))
-	selectedIdx := 0
-	for i, r := range rows {
-		items = append(items, r)
-		if strings.TrimSpace(r.value) == selected {
-			selectedIdx = i
-		}
-	}
-
-	l := list.New(items, paneBorderFormatsDelegate{}, 0, 0)
+	l := list.New(nil, paneBorderFormatsDelegate{}, 0, 0)
 	configureList(&l)
 	l.SetDelegate(paneBorderFormatsDelegate{})
-	if len(items) > 0 {
-		l.Select(selectedIdx)
-	}
 
 	in := textinput.New()
 	in.CharLimit = 2048
 	in.Prompt = "new: "
 	in.Placeholder = "tmux format string"
 	configureSearch(&in)
-	setSearchFocused(&in, true)
 
-	return &paneBorderFormatsModel{
+	m := &paneBorderFormatsModel{
 		includeInherit: includeInherit,
 		allowEdit:      allowEdit,
 		selected:       selected,
@@ -126,20 +102,27 @@ func newPaneBorderFormatsModel(defs config.Defaults, selected string, includeInh
 		addInput:       in,
 		keymap:         defaultKeyMap(),
 	}
+
+	// Ensure the currently selected value is present in the list (for group overrides
+	// that might reference a custom format not present in defaults).
+	if selected != "" {
+		defs.PaneBorderFmt = selected
+	}
+	m.setRows(buildPaneBorderFormatRows(defs, includeInherit))
+	return m
 }
 
 func buildPaneBorderFormatRows(defs config.Defaults, includeInherit bool) []paneBorderFormatRow {
-	choices := paneBorderFormatChoices(defs)
-	rows := make([]paneBorderFormatRow, 0, len(choices)+1)
+	var rows []paneBorderFormatRow
 	if includeInherit {
-		rows = append(rows, paneBorderFormatRow{label: "inherit  (use defaults)", value: "", deletable: false})
+		rows = append(rows, paneBorderFormatRow{label: "inherit  (use defaults)"})
 	}
-	// First is built-in default.
-	if len(choices) > 0 {
-		rows = append(rows, paneBorderFormatRow{label: "default", value: choices[0], deletable: false})
-	}
-	for i := 1; i < len(choices); i++ {
-		rows = append(rows, paneBorderFormatRow{label: fmt.Sprintf("custom %d", i), value: choices[i], deletable: true})
+	for i, v := range paneBorderFormatChoices(defs) {
+		row := paneBorderFormatRow{label: fmt.Sprintf("custom %d", i), value: v, deletable: true}
+		if i == 0 { // the built-in default comes first
+			row = paneBorderFormatRow{label: "default", value: v}
+		}
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -149,118 +132,19 @@ func (m *paneBorderFormatsModel) Init() tea.Cmd { return nil }
 func (m *paneBorderFormatsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		innerW, innerH := frameInnerSize(msg.Width, msg.Height)
-		listH := innerH - 2 // header + footer
-		if m.adding {
-			listH -= 2 // input + spacer
-		}
-		m.list.SetSize(innerW, max(1, listH))
-		m.addInput.Width = max(10, innerW-len(m.addInput.Prompt))
+		m.width, m.height = msg.Width, msg.Height
+		m.layout()
 		return m, nil
 	case tea.KeyMsg:
 		if m.confirmDel {
-			s := msg.String()
-			switch s {
-			case "y", "Y", "enter":
-				m.confirmDel = false
-				m.deleteValue(m.delValue)
-				m.delValue = ""
-				return m, nil
-			case "n", "N", "esc":
-				m.confirmDel = false
-				m.delValue = ""
-				return m, nil
-			default:
-				return m, nil
-			}
+			m.confirmDeleteKey(msg.String())
+			return m, nil
 		}
-
 		if m.adding {
-			s := msg.String()
-			switch s {
-			case "esc":
-				m.adding = false
-				m.addInput.Blur()
-				m.addInput.SetValue("")
-				m.addToast = toast{}
-				return m, nil
-			case "enter":
-				v := strings.TrimSpace(m.addInput.Value())
-				m.addInput.SetValue("")
-				if v == "" {
-					m.addToast = toast{text: "format required", level: toastWarn}
-					return m, nil
-				}
-				if !m.allowEdit {
-					m.addToast = toast{text: "read-only", level: toastWarn}
-					return m, nil
-				}
-				defs := config.Defaults{PaneBorderFmt: config.DefaultPaneBorderFormat, PaneBorderFmts: m.custom}
-				if !addPaneBorderFormat(&defs, v) {
-					m.addToast = toast{text: "already exists", level: toastWarn}
-					return m, nil
-				}
-				m.custom = defs.PaneBorderFmts
-				m.selected = v
-				m.adding = false
-				m.addInput.Blur()
-				m.addToast = toast{text: "added", level: toastOK}
-				m.rebuildList()
-				return m, nil
-			default:
-				var cmd tea.Cmd
-				m.addInput, cmd = m.addInput.Update(msg)
-				return m, cmd
-			}
+			return m, m.addKey(msg)
 		}
-
-		if key.Matches(msg, m.keymap.Esc) {
-			return m, func() tea.Msg { return paneBorderFormatsCancelMsg{} }
-		}
-
-		if msg.String() == "enter" {
-			row, ok := m.list.SelectedItem().(paneBorderFormatRow)
-			if !ok {
-				return m, nil
-			}
-			val := strings.TrimSpace(row.value)
-			if !m.includeInherit && val == "" {
-				val = config.DefaultPaneBorderFormat
-			}
-			m.selected = val
-			return m, func() tea.Msg {
-				return paneBorderFormatsDoneMsg{value: m.selected, customFmts: append([]string(nil), m.custom...)}
-			}
-		}
-
-		if m.allowEdit {
-			s := msg.String()
-			switch s {
-			case "a":
-				m.adding = true
-				m.addToast = toast{}
-				m.addInput.Focus()
-				setSearchFocused(&m.addInput, true)
-				// resize list for add mode
-				if m.width > 0 && m.height > 0 {
-					_, _ = m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
-				}
-				return m, nil
-			case "d":
-				row, ok := m.list.SelectedItem().(paneBorderFormatRow)
-				if !ok {
-					return m, nil
-				}
-				if !row.deletable {
-					m.addToast = toast{text: "can't delete default", level: toastWarn}
-					return m, nil
-				}
-				m.confirmDel = true
-				m.delValue = row.value
-				return m, nil
-			}
+		if cmd, ok := m.browseKey(msg); ok {
+			return m, cmd
 		}
 	}
 
@@ -269,20 +153,124 @@ func (m *paneBorderFormatsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *paneBorderFormatsModel) deleteValue(v string) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return
+// layout fits the list and the add input into the frame. While the input
+// shows, it takes two list rows.
+func (m *paneBorderFormatsModel) layout() {
+	innerW, innerH := frameInnerSize(m.width, m.height)
+	listH := innerH - 2 // header + footer
+	if m.adding {
+		listH -= 2 // input + spacer
 	}
-	if strings.TrimSpace(config.DefaultPaneBorderFormat) == v {
+	m.list.SetSize(innerW, max(1, listH))
+	m.addInput.Width = max(10, innerW-len(m.addInput.Prompt))
+}
+
+// browseKey handles a key in list mode. ok is false when the list itself
+// should get the key (cursor moves).
+func (m *paneBorderFormatsModel) browseKey(msg tea.KeyMsg) (cmd tea.Cmd, ok bool) {
+	switch {
+	case key.Matches(msg, m.keymap.Esc):
+		return func() tea.Msg { return paneBorderFormatsCancelMsg{} }, true
+	case msg.String() == "enter":
+		return m.choose(), true
+	case !m.allowEdit:
+		return nil, false
+	case msg.String() == "a":
+		m.addToast = toast{}
+		m.setAdding(true)
+	case msg.String() == "d":
+		m.askDelete()
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+// choose sends the selected format and the custom list to the parent.
+func (m *paneBorderFormatsModel) choose() tea.Cmd {
+	row, _ := m.list.SelectedItem().(paneBorderFormatRow) // the default row is always there
+	m.selected = strings.TrimSpace(row.value)
+	done := paneBorderFormatsDoneMsg{value: m.selected, customFmts: append([]string(nil), m.custom...)}
+	return func() tea.Msg { return done }
+}
+
+func (m *paneBorderFormatsModel) askDelete() {
+	row, _ := m.list.SelectedItem().(paneBorderFormatRow)
+	if !row.deletable {
 		m.addToast = toast{text: "can't delete default", level: toastWarn}
 		return
 	}
+	m.confirmDel = true
+	m.delValue = row.value
+}
 
-	defs := config.Defaults{PaneBorderFmt: config.DefaultPaneBorderFormat, PaneBorderFmts: m.custom}
+// confirmDeleteKey answers the delete prompt; other keys keep it open.
+func (m *paneBorderFormatsModel) confirmDeleteKey(k string) {
+	switch k {
+	case "y", "Y", "enter":
+		m.deleteValue(m.delValue)
+	case "n", "N", "esc":
+	default:
+		return
+	}
+	m.confirmDel = false
+	m.delValue = ""
+}
+
+// addKey handles a key while the add input shows.
+func (m *paneBorderFormatsModel) addKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.addInput.SetValue("")
+		m.addToast = toast{}
+		m.setAdding(false)
+	case "enter":
+		m.submitAdd()
+	default:
+		var cmd tea.Cmd
+		m.addInput, cmd = m.addInput.Update(msg)
+		return cmd
+	}
+	return nil
+}
+
+func (m *paneBorderFormatsModel) submitAdd() {
+	v := strings.TrimSpace(m.addInput.Value())
+	m.addInput.SetValue("")
+	if v == "" {
+		m.addToast = toast{text: "format required", level: toastWarn}
+		return
+	}
+	defs := config.Defaults{PaneBorderFmts: m.custom}
+	if !addPaneBorderFormat(&defs, v) {
+		m.addToast = toast{text: "already exists", level: toastWarn}
+		return
+	}
+	m.custom = defs.PaneBorderFmts
+	m.selected = v
+	m.addToast = toast{text: "added", level: toastOK}
+	m.setAdding(false)
+	m.rebuildList()
+}
+
+// setAdding shows or hides the add input and resizes the list to match.
+func (m *paneBorderFormatsModel) setAdding(on bool) {
+	m.adding = on
+	if on {
+		m.addInput.Focus()
+	} else {
+		m.addInput.Blur()
+	}
+	m.refreshAccentStyles()
+	m.layout()
+}
+
+// deleteValue removes custom format v; askDelete only offers custom rows.
+func (m *paneBorderFormatsModel) deleteValue(v string) {
+	defs := config.Defaults{PaneBorderFmts: m.custom}
 	removePaneBorderFormat(&defs, v)
 	m.custom = defs.PaneBorderFmts
-	if strings.TrimSpace(m.selected) == v {
+	if m.selected == v {
 		m.selected = config.DefaultPaneBorderFormat
 	}
 	m.addToast = toast{text: "deleted", level: toastOK}
@@ -291,19 +279,18 @@ func (m *paneBorderFormatsModel) deleteValue(v string) {
 
 func (m *paneBorderFormatsModel) rebuildList() {
 	defs := config.Defaults{PaneBorderFmt: m.selected, PaneBorderFmts: m.custom}
-	rows := buildPaneBorderFormatRows(defs, m.includeInherit)
-	items := make([]list.Item, 0, len(rows))
-	idx := 0
+	m.setRows(buildPaneBorderFormatRows(defs, m.includeInherit))
+}
+
+// setRows fills the list and puts the cursor on the selected value.
+func (m *paneBorderFormatsModel) setRows(rows []paneBorderFormatRow) {
+	items := make([]list.Item, len(rows))
 	for i, r := range rows {
-		items = append(items, r)
-		if strings.TrimSpace(r.value) == strings.TrimSpace(m.selected) {
-			idx = i
-		}
+		items[i] = r
 	}
 	m.list.SetItems(items)
-	if len(items) > 0 {
-		m.list.Select(idx)
-	}
+	sel := strings.TrimSpace(m.selected)
+	m.list.Select(max(0, slices.IndexFunc(rows, func(r paneBorderFormatRow) bool { return strings.TrimSpace(r.value) == sel })))
 }
 
 func (m *paneBorderFormatsModel) View() string {
