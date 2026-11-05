@@ -31,6 +31,10 @@ Reconnect on lost connection (all tmux modes):
   - `r`/`R`: run the same ssh again in the same pane.
   - `Enter`, `q`, Ctrl-C, Ctrl-D: close the pane.
   - other keys are ignored.
+- Before the prompt, the wrapper resets terminal modes a full-screen remote
+  program may leave on (alt screen, mouse tracking, bracketed paste, hidden
+  cursor). Without this, the reconnected session gets no pane history and the
+  mouse wheel does not scroll.
 - Any other exit (user ended the session): the pane closes at once.
 - While the prompt shows, `synchronize-panes` is off for that pane only (tmux >= 3.2),
   so synced keys do not cross between the dead pane and live panes.

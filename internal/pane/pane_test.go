@@ -105,6 +105,10 @@ func TestRunLostThenReconnect(t *testing.T) {
 	if !strings.Contains(f.out.String(), "Connection to web01 lost") {
 		t.Fatalf("out=%q, want lost prompt", f.out.String())
 	}
+	// The dead session may leave alt screen and mouse tracking on: no history, no scroll.
+	if !strings.HasPrefix(f.out.String(), "\033[?1049l\033[?1000l") {
+		t.Fatalf("out=%q, want terminal modes reset before the prompt", f.out.String())
+	}
 }
 
 func TestRunLostThenClose(t *testing.T) {

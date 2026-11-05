@@ -23,7 +23,12 @@ const Subcommand = "__pane"
 // lostCode is the exit code ssh uses for its own errors, including a lost connection.
 const lostCode = 255
 
-const prompt = "\r\n\033[41m\033[30m Connection to %s lost: [r] reconnect  [Enter] close \033[0m"
+// resetModes turns off what a full-screen remote program (vim, less, htop) may
+// leave on when the link drops: alt screen (no history), mouse tracking (wheel
+// does not scroll), bracketed paste, hidden cursor. A reconnect reuses the pane.
+const resetModes = "\033[?1049l\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?2004l\033[?25h"
+
+const prompt = resetModes + "\r\n\033[41m\033[30m Connection to %s lost: [r] reconnect  [Enter] close \033[0m"
 
 // Action is what the lost-connection prompt does with one key press.
 type Action int
