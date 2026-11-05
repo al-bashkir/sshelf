@@ -33,6 +33,61 @@ func TestParseKnownHosts(t *testing.T) {
 	}
 }
 
+func TestParseKnownHostsKeepsOneFieldLine(t *testing.T) {
+	hosts, skipped, err := ParseKnownHosts(strings.NewReader("lone.example\n"))
+	if err != nil || skipped != 0 || !reflect.DeepEqual(hosts, []string{"lone.example"}) {
+		t.Fatalf("got hosts=%v skipped=%d err=%v, want [lone.example] 0 nil", hosts, skipped, err)
+	}
+}
+
+func TestParseKnownHostsLineOver64KiB(t *testing.T) {
+	line := "long.example ssh-rsa " + strings.Repeat("A", 100*1024)
+	hosts, _, err := ParseKnownHosts(strings.NewReader(line + "\n"))
+	if err != nil || !reflect.DeepEqual(hosts, []string{"long.example"}) {
+		t.Fatalf("got hosts=%v err=%v, want [long.example] nil", hosts, err)
+	}
+}
+
+func TestParseKnownHostsDropsEmptyAndHashedNamesInList(t *testing.T) {
+	hosts, skipped, err := ParseKnownHosts(strings.NewReader("a.example,,|1|abc,b.example ssh-ed25519 AAAA...\n"))
+	if err != nil || skipped != 0 || !reflect.DeepEqual(hosts, []string{"a.example", "b.example"}) {
+		t.Fatalf("got hosts=%v skipped=%d err=%v, want [a.example b.example] 0 nil", hosts, skipped, err)
+	}
+}
+
+func TestParseKnownHostsLineOver1MiBFails(t *testing.T) {
+	line := "huge.example ssh-rsa " + strings.Repeat("A", 1024*1024)
+	if hosts, _, err := ParseKnownHosts(strings.NewReader(line + "\n")); err == nil {
+		t.Fatalf("got hosts=%v err=nil, want an error", hosts)
+	}
+}
+
+func TestPathErrorMessage(t *testing.T) {
+	err := os.ErrNotExist
+	if got := (PathError{Path: "/x", Err: err}).Error(); got != "/x: "+err.Error() {
+		t.Fatalf("with path: got %q", got)
+	}
+	if got := (PathError{Err: err}).Error(); got != err.Error() {
+		t.Fatalf("without path: got %q", got)
+	}
+}
+
+func TestLoadKnownHostsDefaultsToHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "known_hosts"), []byte("home.example ssh-ed25519 AAAA...\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, errs := LoadKnownHosts(nil)
+	if len(errs) != 0 || !reflect.DeepEqual(res.Hosts, []string{"home.example"}) {
+		t.Fatalf("got hosts=%v errs=%v, want [home.example] none", res.Hosts, errs)
+	}
+}
+
 func TestLoadKnownHosts(t *testing.T) {
 	d := t.TempDir()
 	f1 := filepath.Join(d, "known_hosts_1")

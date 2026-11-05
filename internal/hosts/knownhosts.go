@@ -3,9 +3,10 @@ package hosts
 import (
 	"bufio"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -28,7 +29,7 @@ func (e PathError) Error() string {
 
 func DefaultKnownHostsPaths() []string {
 	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	if err != nil { // UserHomeDir fails when $HOME is empty
 		return nil
 	}
 	return []string{filepath.Join(home, ".ssh", "known_hosts")}
@@ -68,54 +69,24 @@ func LoadKnownHosts(paths []string) (LoadResult, []PathError) {
 		}
 	}
 
-	out := make([]string, 0, len(set))
-	for h := range set {
-		out = append(out, h)
-	}
-	sort.Strings(out)
-
-	return LoadResult{Hosts: out, SkippedLines: skipped}, errs
+	return LoadResult{Hosts: slices.Sorted(maps.Keys(set)), SkippedLines: skipped}, errs
 }
 
 func ParseKnownHosts(r io.Reader) ([]string, int, error) {
 	s := bufio.NewScanner(r)
 	// known_hosts lines can be long because of key material; bump buffer.
-	s.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	s.Buffer(nil, 1024*1024)
 
 	set := make(map[string]struct{})
 	skipped := 0
 
 	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		names, ok := lineHosts(s.Text())
+		if !ok {
 			skipped++
 			continue
 		}
-		if strings.HasPrefix(line, "@") {
-			skipped++
-			continue
-		}
-
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			skipped++
-			continue
-		}
-		first := fields[0]
-		if strings.HasPrefix(first, "|1|") {
-			skipped++
-			continue
-		}
-
-		for _, raw := range strings.Split(first, ",") {
-			h := strings.TrimSpace(raw)
-			if h == "" {
-				continue
-			}
-			// Hashed hostnames are not displayable in MVP.
-			if strings.HasPrefix(h, "|1|") {
-				continue
-			}
+		for _, h := range names {
 			set[h] = struct{}{}
 		}
 	}
@@ -123,12 +94,26 @@ func ParseKnownHosts(r io.Reader) ([]string, int, error) {
 	if err := s.Err(); err != nil {
 		return nil, skipped, err
 	}
+	return slices.Sorted(maps.Keys(set)), skipped, nil
+}
 
-	hosts := make([]string, 0, len(set))
-	for h := range set {
-		hosts = append(hosts, h)
+// lineHosts returns the host names of one known_hosts line. ok is false for
+// a line to skip: blank, comment, @marker, or a hashed first host.
+func lineHosts(line string) (names []string, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "@") {
+		return nil, false
 	}
-	sort.Strings(hosts)
-
-	return hosts, skipped, nil
+	first := strings.Fields(line)[0] // line is trimmed and non-empty
+	if strings.HasPrefix(first, "|1|") {
+		return nil, false
+	}
+	for _, raw := range strings.Split(first, ",") {
+		h := strings.TrimSpace(raw)
+		// Hashed hostnames are not displayable in MVP.
+		if h != "" && !strings.HasPrefix(h, "|1|") {
+			names = append(names, h)
+		}
+	}
+	return names, true
 }
