@@ -223,9 +223,14 @@ func (m *formModel) isFieldDisabled(fd *fieldDef) string {
 	return fd.DisabledWhen(m.values)
 }
 
-// isFocusedFieldDisabled returns true when the focused field is disabled.
-func (m *formModel) isFocusedFieldDisabled() bool {
-	return m.isFieldDisabled(m.focusedField()) != ""
+// enabledField returns the focused field, or nil when no field has focus
+// or the focused one is disabled.
+func (m *formModel) enabledField() *fieldDef {
+	fd := m.focusedField()
+	if m.isFieldDisabled(fd) != "" {
+		return nil
+	}
+	return fd
 }
 
 // ---------------------------------------------------------------------------
@@ -334,87 +339,92 @@ func (m *formModel) updateFocusedInput(msg tea.Msg) tea.Cmd {
 // handleKey processes a key message in the generic form.
 // Returns true if the key was consumed by the form.
 func (m *formModel) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
-	// Picker popup intercepts all keys while open.
-	if m.picker != nil {
-		return m.handlePickerKey(msg), nil
+	switch {
+	case m.picker != nil:
+		m.handlePickerKey(msg)
+		return true, nil
+	case m.editing:
+		return true, m.editKey(msg)
 	}
+	return m.navKey(msg.String()), nil
+}
 
-	// Insert mode: route everything to the text input.
-	if m.editing {
-		switch msg.String() {
-		case "esc":
-			m.exitEdit()
-			return true, nil
-		case "enter":
-			m.exitEdit()
-			m.moveFocus(1)
-			return true, nil
-		default:
-			return true, m.updateFocusedInput(msg)
-		}
+// editKey handles insert mode: Esc ends it, Enter ends it and moves on, and
+// every other key types into the field.
+func (m *formModel) editKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.exitEdit()
+	case "enter":
+		m.exitEdit()
+		m.moveFocus(1)
+	default:
+		return m.updateFocusedInput(msg)
 	}
+	return nil
+}
 
-	// Normal mode.
-	s := msg.String()
+// navKey handles normal mode. It returns false for keys the wrapper owns.
+func (m *formModel) navKey(s string) bool {
 	switch s {
 	case "j", "down", "tab":
 		m.moveFocus(1)
-		return true, nil
 	case "k", "up", "shift+tab":
 		m.moveFocus(-1)
-		return true, nil
 	case "i":
-		if fd := m.focusedField(); fd != nil && fd.isTextField() && !m.isFocusedFieldDisabled() {
+		if m.enabledField() != nil {
 			m.enterEdit()
 		}
-		return true, nil
 	case "enter", " ":
-		if fd := m.focusedField(); fd != nil && !m.isFocusedFieldDisabled() {
-			switch fd.Kind {
-			case fieldText, fieldNumber:
-				m.enterEdit()
-				return true, nil
-			case fieldPicker:
-				m.openPicker()
-				return true, nil
-			case fieldSubModal:
-				return false, nil // wrapper handles sub-modal activation
-			}
-		}
-		m.moveFocus(1)
-		return true, nil
+		return m.choose()
 	case "l", "right":
-		if fd := m.focusedField(); fd != nil && !m.isFocusedFieldDisabled() {
-			switch fd.Kind {
-			case fieldPicker:
-				m.openPicker()
-				return true, nil
-			case fieldSubModal:
-				return false, nil
-			}
-		}
-		return true, nil
+		return m.open(m.enabledField())
+	default:
+		return false
 	}
+	return true
+}
 
-	return false, nil
+// choose is Enter or Space: it edits a text field and opens other fields.
+// With no enabled field, focus moves on.
+func (m *formModel) choose() bool {
+	fd := m.enabledField()
+	switch {
+	case fd == nil:
+		m.moveFocus(1)
+	case fd.isTextField():
+		m.enterEdit()
+	default:
+		return m.open(fd)
+	}
+	return true
+}
+
+// open opens a picker and leaves a sub-modal to the wrapper (false).
+func (m *formModel) open(fd *fieldDef) bool {
+	if fd != nil && fd.Kind == fieldSubModal {
+		return false
+	}
+	m.openPicker(fd)
+	return true
 }
 
 // ---------------------------------------------------------------------------
 // Picker popup
 // ---------------------------------------------------------------------------
 
-// openPicker creates and shows the option picker popup for the focused field.
-func (m *formModel) openPicker() {
-	fd := m.focusedField()
+// openPicker shows the option picker popup for fd when it is a picker with
+// options.
+func (m *formModel) openPicker(fd *fieldDef) {
 	if fd == nil || fd.Kind != fieldPicker || len(fd.Options) == 0 {
 		return
 	}
 	m.picker = newOptionPickerPopup(fd.Key, fd.Label, m.values[fd.Key], fd.Options)
 }
 
-// handlePickerKey routes key events to the open picker popup.
-// Returns true (always consumed while popup is open).
-func (m *formModel) handlePickerKey(msg tea.KeyMsg) bool {
+// handlePickerKey routes key events to the open picker popup, which takes
+// every key while it is open.
+func (m *formModel) handlePickerKey(msg tea.KeyMsg) {
 	switch msg.String() {
 	case "j", "down":
 		m.picker.moveDown()
@@ -422,14 +432,11 @@ func (m *formModel) handlePickerKey(msg tea.KeyMsg) bool {
 		m.picker.moveUp()
 	case "enter":
 		m.values[m.picker.fieldKey] = m.picker.selected()
-		if fd := m.schema.fieldByKey(m.picker.fieldKey); fd != nil {
-			m.validateField(fd)
-		}
+		m.validateField(m.schema.fieldByKey(m.picker.fieldKey))
 		m.picker = nil
 	case "esc":
 		m.picker = nil
 	}
-	return true
 }
 
 // overlayPickerOnVisible renders the picker popup on top of visible content
@@ -526,12 +533,10 @@ func (m *formModel) positionInfo() string {
 
 // footerHints returns context-sensitive key hints for the footer.
 // Format: "key action  key action" (double-space separated, for styledFooter).
+// renderFooter shows the insert-mode hints itself.
 func (m *formModel) footerHints() string {
 	if m.picker != nil {
 		return "⏎ select  Esc cancel"
-	}
-	if m.editing {
-		return "Ctrl+S save  Esc done"
 	}
 	fd := m.focusedField()
 	if fd == nil {
@@ -564,15 +569,13 @@ func (m *formModel) renderFooter() string {
 // validateField runs the validator for a single field and updates
 // validationErrs.
 func (m *formModel) validateField(fd *fieldDef) {
-	if fd == nil || fd.Validate == nil {
-		delete(m.validationErrs, fd.Key)
+	delete(m.validationErrs, fd.Key)
+	if fd.Validate == nil {
 		return
 	}
 	if err := fd.Validate(m.values[fd.Key]); err != nil {
 		m.validationErrs[fd.Key] = err.Error()
-		return
 	}
-	delete(m.validationErrs, fd.Key)
 }
 
 // ---------------------------------------------------------------------------
