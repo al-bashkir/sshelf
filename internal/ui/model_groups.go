@@ -10,8 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -45,32 +43,14 @@ func (i groupRow) Description() string { return "" }
 func (i groupRow) FilterValue() string { return i.name }
 
 type groupsModel struct {
-	connectActions
-	opts Options
-
-	width  int
-	height int
+	listScreen
 
 	allRows []groupRow
 	rows    []groupRow
 
-	list   list.Model
-	search textinput.Model
-	focus  focusState
-
-	keymap         keyMap
-	showHelp       bool
-	helpVP         viewport.Model
-	cmdPrompt      bool
-	cmdPromptCrumb string
-	cmdInput       textinput.Model
-
 	confirmQuit   bool
 	confirmDelete bool
 	deleteIndex   int
-
-	prevSearch  string
-	navPendingG bool
 }
 
 func newGroupsModel(opts Options) *groupsModel {
@@ -83,21 +63,7 @@ func newGroupsModel(opts Options) *groupsModel {
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	l.SetDelegate(groupsDelegate{})
 	l.Title = "Groups"
-	configureList(&l)
-
-	search := newSearchInput()
-
-	m := &groupsModel{
-		opts:     opts,
-		allRows:  rows,
-		rows:     rows,
-		list:     l,
-		search:   search,
-		focus:    focusList,
-		keymap:   defaultKeyMap(),
-		showHelp: false,
-	}
-	return m
+	return &groupsModel{listScreen: newListScreen(opts, l), allRows: rows, rows: rows}
 }
 
 func groupsRows(inv config.Inventory) []groupRow {
@@ -129,19 +95,7 @@ func (m *groupsModel) Refresh(inv config.Inventory) {
 func (m *groupsModel) Init() tea.Cmd { return nil }
 
 func (m *groupsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		m.list.SetSize(max(0, m.width-2), tabBoxListContentHeight(m.width, m.height)) // View sizes the search box
-		return m, nil
-	case tea.KeyMsg:
-		if cmd, ok := routeListKey(msg, m.overlayKey, m.keymap, &m.focus, &m.search, m.keyActions); ok {
-			return m, cmd
-		}
-	case toastMsg:
-		return m, m.showToast(toast(msg), m.opts.Popup)
-	}
-	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
+	return m, m.update(msg, m.overlayKey, m.keyActions, m.applyFilter)
 }
 
 // overlayKey handles keys while help, the command prompt or a question
@@ -237,8 +191,7 @@ func (m *groupsModel) onRow(f func(groupRow) tea.Cmd) func() tea.Cmd {
 // enter accepts the query in the search box, or opens the group from the
 // list.
 func (m *groupsModel) enter() tea.Cmd {
-	if m.focus == focusSearch {
-		acceptSearch(&m.focus, &m.search, &m.prevSearch, len(m.list.Items()), m.applyFilter)
+	if m.acceptQuery(m.applyFilter) {
 		return nil
 	}
 	return m.onRow(func(r groupRow) tea.Cmd { return msgCmd(openGroupHostsMsg{index: r.index}) })()
@@ -369,8 +322,8 @@ func (m *groupsModel) helpKeys() helpMap {
 }
 
 func (m *groupsModel) emptyStateView() string {
-	return renderListEmptyState(m.width, m.height, m.search.Value(),
-		dim.Render("No groups yet.")+"\n"+dim.Render("n \u2014 create a new group"))
+	return m.emptyView(
+		dim.Render("No groups yet.") + "\n" + dim.Render("n \u2014 create a new group"))
 }
 
 func (m *groupsModel) applyFilter(query string) {

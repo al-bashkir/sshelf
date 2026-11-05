@@ -7,6 +7,10 @@ For user-facing behavior and keybindings see [UI spec](../functional/ui.md).
 
 - Router/state machine: `internal/ui/model_app.go`
 - Leaf models (screens, popups): `internal/ui/model_*.go`
+- List screens (Hosts, Groups, Group hosts) embed `listScreen`
+  (`internal/ui/list_screen.go`): the shared list, search, help, command
+  prompt and connect state, and the shared `update` (size, keys, toasts).
+  Each screen adds its own `overlayKey` and `keyActions` table.
 - Shared rendering helpers/styles:
   - Layout tabs box: `internal/ui/tab_box.go`
   - Frame + styles + accent: `internal/ui/styles.go`

@@ -297,3 +297,10 @@ func TestGroupsCopyStaleRow(t *testing.T) {
 	}
 	wantToast(t, "groups", m.toast, "no group selected", toastWarn)
 }
+
+func TestGroupsEnterInSearchOnlyAccepts(t *testing.T) {
+	m := groupsScreen(nil)
+	if cmd := on(m, "/", "w", "enter"); cmd != nil {
+		t.Fatalf("enter in search gave %#v, want only the query accepted", msgOf(cmd))
+	}
+}

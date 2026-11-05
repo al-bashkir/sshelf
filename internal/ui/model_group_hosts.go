@@ -9,39 +9,19 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type groupHostsModel struct {
 	hostSelectList
-	connectActions
-	opts Options
-
-	width  int
-	height int
+	listScreen
 
 	groupIndex int
 	group      config.Group
 
-	list   list.Model
-	search textinput.Model
-	focus  focusState
-
-	keymap         keyMap
-	showHelp       bool
-	helpVP         viewport.Model
-	cmdPrompt      bool
-	cmdPromptCrumb string
-	cmdInput       textinput.Model
-
 	confirmRemove bool
 	removeList    []string
-
-	prevSearch  string
-	navPendingG bool
 }
 
 func newGroupHostsModel(opts Options, groupIndex int) *groupHostsModel {
@@ -58,19 +38,11 @@ func newGroupHostsModel(opts Options, groupIndex int) *groupHostsModel {
 
 	l := list.New(items, hostDelegate{}, 0, 0)
 	l.Title = "Group: " + g.Name
-	configureList(&l)
-
-	search := newSearchInput()
-
 	m := &groupHostsModel{
 		hostSelectList: newHostSelectList(g.Hosts),
-		opts:           opts,
+		listScreen:     newListScreen(opts, l),
 		groupIndex:     groupIndex,
 		group:          g,
-		list:           l,
-		search:         search,
-		focus:          focusList,
-		keymap:         defaultKeyMap(),
 	}
 	m.bindList(&m.list)
 	return m
@@ -79,157 +51,112 @@ func newGroupHostsModel(opts Options, groupIndex int) *groupHostsModel {
 func (m *groupHostsModel) Init() tea.Cmd { return nil }
 
 func (m *groupHostsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		w := msg.Width
-		h := msg.Height
-		m.width = w
-		m.height = h
-		m.list.SetSize(max(0, w-2), tabBoxListContentHeight(w, h)) // View sizes the search box
-		return m, nil
-	case tea.KeyMsg:
-		if m.showHelp {
-			if key.Matches(msg, m.keymap.Help) || msg.String() == "esc" {
-				m.showHelp = false
-				return m, nil
-			}
-			updateHelpViewport(&m.helpVP, msg)
-			return m, nil
-		}
+	return m, m.update(msg, m.overlayKey, m.keyActions, m.applyFilter)
+}
 
-		if m.cmdPrompt {
-			return m, handleCmdPromptKey(msg, &m.cmdPrompt, &m.cmdInput, &m.toast, m.handleConnectWithRemoteCommand)
-		}
-
-		if m.confirmRemove {
-			s := msg.String()
-			switch s {
-			case "y", "Y", "enter":
-				toRemove := append([]string(nil), m.removeList...)
-				m.confirmRemove = false
-				m.removeList = nil
-				return m, func() tea.Msg { return removeHostsMsg{groupIndex: m.groupIndex, hosts: toRemove} }
-			case "n", "N", "esc":
-				m.confirmRemove = false
-				m.removeList = nil
-				m.toast = toast{}
-				return m, nil
-			default:
-				return m, nil
-			}
-		}
-		if handled, cmd := handleConfirmConnect(msg, &m.confirmConnect, &m.pendingConnectFn, &m.toast); handled {
-			return m, cmd
-		}
-
-		if m.focus == focusList {
-			if handleVimListNav(msg, &m.list, &m.navPendingG) {
-				return m, nil
-			}
-		} else {
-			m.navPendingG = false
-		}
-
-		if key.Matches(msg, m.keymap.HostsTab) {
-			return m, func() tea.Msg { return switchScreenMsg{to: screenHosts} }
-		}
-		if key.Matches(msg, m.keymap.GroupsTab) {
-			return m, func() tea.Msg { return switchScreenMsg{to: screenGroups} }
-		}
-		if key.Matches(msg, m.keymap.Settings) {
-			return m, func() tea.Msg { return openDefaultsFormMsg{returnTo: screenGroupHosts} }
-		}
-
-		if key.Matches(msg, m.keymap.Help) {
-			m.showHelp = !m.showHelp
-			if m.showHelp && m.width > 0 && m.height > 0 {
-				m.helpVP = initHelpViewport(m.width, m.height, "Group Hosts", m.helpKeys())
-			}
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.DeleteGroup) && m.focus == focusList {
-			toRemove := m.hostsToOpen()
-			if len(toRemove) == 0 {
-				m.toast = toast{text: "no host selected", level: toastWarn}
-				return m, nil
-			}
-			m.confirmRemove = true
-			m.removeList = toRemove
-			m.toast = toast{text: fmt.Sprintf("remove %d? (y/n)", len(toRemove)), level: toastWarn}
-			return m, nil
-		}
-		if handleFocusKeys(msg, m.keymap, &m.focus, &m.search) {
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.Esc) || (key.Matches(msg, m.keymap.Quit) && m.focus != focusSearch) {
-			// Esc/q priority: blur search → clear selection → clear search → back.
-			if handleEscChain(&m.focus, &m.search, &m.prevSearch, len(m.selected), m.clearSelection, m.applyFilter) {
-				return m, nil
-			}
-			return m, func() tea.Msg { return switchScreenMsg{to: screenGroups} }
-		}
-
-		if key.Matches(msg, m.keymap.ToggleSel) && m.focus == focusList {
-			m.toggleCurrentSelection()
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.SelectAll) && m.focus == focusList {
-			m.selectAllFiltered()
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.ClearSel) && m.focus == focusList {
-			m.clearSelection()
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.ConnectCmd) && m.focus == focusList {
-			targets := m.hostsToOpen()
-			if len(targets) == 0 {
-				return m, nil
-			}
-			m.cmdPromptCrumb = cmdPromptCrumb("Groups > "+m.group.Name, targets)
-			m.cmdInput = newCmdPromptInput(m.width, m.height)
-			m.cmdPrompt = true
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.Connect) {
-			if m.focus == focusSearch {
-				acceptSearch(&m.focus, &m.search, &m.prevSearch, len(m.list.Items()), m.applyFilter)
-				return m, nil
-			}
-			m.toast = toast{}
-			return m, m.connect(m.hostsToOpen(), m.opts, &m.group, false, "")
-		}
-		if key.Matches(msg, m.keymap.OneWindow) && m.focus == focusList {
-			m.toast = toast{}
-			return m, m.connect(m.hostsToOpen(), m.opts, &m.group, true, "")
-		}
-		if key.Matches(msg, m.keymap.ConnectSame) && m.focus == focusList {
-			m.toast = toast{}
-			return m, m.connectSameWindow(m.hostsToOpen(), m.opts, &m.group)
-		}
-		if key.Matches(msg, m.keymap.AddHosts) && m.focus == focusList {
-			return m, func() tea.Msg { return openHostPickerMsg{groupIndex: m.groupIndex, returnTo: screenGroupHosts} }
-		}
-		if key.Matches(msg, m.keymap.CustomHost) && m.focus == focusList {
-			return m, func() tea.Msg { return openCustomHostMsg{returnTo: screenGroupHosts, groupIndex: m.groupIndex} }
-		}
-		if key.Matches(msg, m.keymap.HostConfig) && m.focus == focusList {
-			return m, openHostConfigCmd(m.currentHost(), screenGroupHosts, &m.toast)
-		}
-		if key.Matches(msg, m.keymap.Copy) && m.focus == focusList {
-			return m, copyHostConfigCmd(m.opts.Inventory, m.currentHost(), screenGroupHosts, &m.toast)
-		}
-
-	case toastMsg:
-		m.toast = toast(msg)
-		if m.opts.Popup && msg.level != toastErr {
-			m.quitting = true
-			return m, tea.Quit
-		}
-		return m, nil
+// overlayKey handles keys while help, the command prompt or a question
+// shows, and vim g/gg/G in the list.
+func (m *groupHostsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch {
+	case m.showHelp:
+		helpViewKey(msg, m.keymap.Help, &m.showHelp, &m.helpVP)
+		return nil, true
+	case m.cmdPrompt:
+		return handleCmdPromptKey(msg, &m.cmdPrompt, &m.cmdInput, &m.toast, m.handleConnectWithRemoteCommand), true
+	case m.confirmRemove:
+		return m.removeKey(msg), true
 	}
+	if handled, cmd := handleConfirmConnect(msg, &m.confirmConnect, &m.pendingConnectFn, &m.toast); handled {
+		return cmd, true
+	}
+	return nil, m.focus == focusList && handleVimListNav(msg, &m.list, &m.navPendingG)
+}
 
-	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
+// removeKey answers the remove question: y removes, n cancels, and any
+// other key leaves the question open.
+func (m *groupHostsModel) removeKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "y", "Y", "enter":
+		toRemove := m.removeList
+		m.confirmRemove, m.removeList = false, nil
+		return msgCmd(removeHostsMsg{groupIndex: m.groupIndex, hosts: toRemove})
+	case "n", "N", "esc":
+		m.confirmRemove, m.removeList = false, nil
+		m.toast = toast{}
+	}
+	return nil
+}
+
+func (m *groupHostsModel) keyActions() []keyAction {
+	km := m.keymap
+	return []keyAction{
+		{keys: km.HostsTab, run: func() tea.Cmd { return msgCmd(switchScreenMsg{to: screenHosts}) }},
+		{keys: km.GroupsTab, run: func() tea.Cmd { return msgCmd(switchScreenMsg{to: screenGroups}) }},
+		{keys: km.Settings, run: func() tea.Cmd { return msgCmd(openDefaultsFormMsg{returnTo: screenGroupHosts}) }},
+		{keys: km.Help, run: func() tea.Cmd {
+			toggleHelpView(&m.showHelp, &m.helpVP, m.width, m.height, "Group Hosts", m.helpKeys)
+			return nil
+		}},
+		{keys: km.DeleteGroup, inList: true, run: m.askRemove},
+		{keys: km.Esc, run: m.back},
+		{keys: km.Quit, inList: true, run: m.back},
+		{keys: km.ToggleSel, inList: true, run: func() tea.Cmd { m.toggleCurrentSelection(); return nil }},
+		{keys: km.SelectAll, inList: true, run: func() tea.Cmd { m.selectAllFiltered(); return nil }},
+		{keys: km.ClearSel, inList: true, run: func() tea.Cmd { m.clearSelection(); return nil }},
+		{keys: km.ConnectCmd, inList: true, run: func() tea.Cmd {
+			return m.openCmdPromptFor("Groups > "+m.group.Name, m.hostsToOpen())
+		}},
+		{keys: km.Connect, run: m.enter},
+		{keys: km.OneWindow, inList: true, run: func() tea.Cmd {
+			m.toast = toast{}
+			return m.connect(m.hostsToOpen(), m.opts, &m.group, true, "")
+		}},
+		{keys: km.ConnectSame, inList: true, run: func() tea.Cmd {
+			m.toast = toast{}
+			return m.connectSameWindow(m.hostsToOpen(), m.opts, &m.group)
+		}},
+		{keys: km.AddHosts, inList: true, run: func() tea.Cmd {
+			return msgCmd(openHostPickerMsg{groupIndex: m.groupIndex, returnTo: screenGroupHosts})
+		}},
+		{keys: km.CustomHost, inList: true, run: func() tea.Cmd {
+			return msgCmd(openCustomHostMsg{returnTo: screenGroupHosts, groupIndex: m.groupIndex})
+		}},
+		{keys: km.HostConfig, inList: true, run: func() tea.Cmd {
+			return openHostConfigCmd(m.currentHost(), screenGroupHosts, &m.toast)
+		}},
+		{keys: km.Copy, inList: true, run: func() tea.Cmd {
+			return copyHostConfigCmd(m.opts.Inventory, m.currentHost(), screenGroupHosts, &m.toast)
+		}},
+	}
+}
+
+// back is Esc, or q in the list: blur search, clear the selection, clear
+// the search, and only then go back to Groups.
+func (m *groupHostsModel) back() tea.Cmd {
+	if handleEscChain(&m.focus, &m.search, &m.prevSearch, len(m.selected), m.clearSelection, m.applyFilter) {
+		return nil
+	}
+	return msgCmd(switchScreenMsg{to: screenGroups})
+}
+
+func (m *groupHostsModel) askRemove() tea.Cmd {
+	toRemove := m.hostsToOpen()
+	if len(toRemove) == 0 {
+		m.toast = toast{text: "no host selected", level: toastWarn}
+		return nil
+	}
+	m.confirmRemove, m.removeList = true, toRemove
+	m.toast = toast{text: fmt.Sprintf("remove %d? (y/n)", len(toRemove)), level: toastWarn}
+	return nil
+}
+
+// enter accepts the query in the search box, or connects from the list.
+func (m *groupHostsModel) enter() tea.Cmd {
+	if m.acceptQuery(m.applyFilter) {
+		return nil
+	}
+	m.toast = toast{}
+	return m.connect(m.hostsToOpen(), m.opts, &m.group, false, "")
 }
 
 func (m *groupHostsModel) View() string {
@@ -342,8 +269,8 @@ func (m *groupHostsModel) helpKeys() helpMap {
 }
 
 func (m *groupHostsModel) emptyStateView() string {
-	return renderListEmptyState(m.width, m.height, m.search.Value(),
-		dim.Render("No hosts in this group.")+"\n"+dim.Render("a \u2014 add hosts"))
+	return m.emptyView(
+		dim.Render("No hosts in this group.") + "\n" + dim.Render("a \u2014 add hosts"))
 }
 
 func (m *groupHostsModel) applyFilter(query string) {

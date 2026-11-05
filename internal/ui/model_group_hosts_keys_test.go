@@ -261,3 +261,51 @@ func TestGroupHostsLayout(t *testing.T) {
 		t.Fatalf("view is %d lines, want 30", len(lines))
 	}
 }
+
+func TestGroupHostsEnterInSearchOnlyAccepts(t *testing.T) {
+	m := groupHostsScreen(0, nil)
+	if cmd := on(m, "/", "b", "enter"); cmd != nil || len(m.execCmd) != 0 {
+		t.Fatalf("enter in search: cmd=%v exec=%v, want only the query accepted", cmd != nil, m.execCmd)
+	}
+}
+
+func TestGroupHostsSelectionKeysTypeInSearch(t *testing.T) {
+	m := groupHostsScreen(0, nil)
+	if on(m, "/", "space"); m.search.Value() != " " || len(m.selectedHosts()) != 0 {
+		t.Fatalf("space in search: query %q selected %v, want it typed", m.search.Value(), m.selectedHosts())
+	}
+	m = groupHostsScreen(0, nil)
+	if on(m, "space", "/", "ctrl+d"); len(m.selectedHosts()) != 1 {
+		t.Fatalf("ctrl+d in search: selected %v, want the selection kept", m.selectedHosts())
+	}
+}
+
+func TestGroupHostsEscAnswersTheConnectQuestionOnly(t *testing.T) {
+	m := groupHostsScreen(0, func(o *Options) { o.Config.Defaults.ConnectConfirmThreshold = 1 })
+	on(m, "ctrl+a", "enter")
+	if cmd := on(m, "esc"); cmd != nil || m.confirmConnect || len(m.selectedHosts()) != 3 {
+		t.Fatalf("esc: confirm=%v selected=%v, want the question closed and the selection kept", m.confirmConnect, m.selectedHosts())
+	}
+}
+
+func TestGroupHostsListsHiddenHostsUnmarked(t *testing.T) {
+	m := groupHostsScreen(0, func(o *Options) { o.Inventory.HiddenHosts = []string{"beta"} })
+	on(m, "/", "a") // every host matches, so the rows come from the search filter
+	if got := slices.Sorted(slices.Values(rowHosts(m.l.Items()))); !slices.Equal(got, []string{"alpha", "beta", "gamma"}) {
+		t.Fatalf("group hosts shows %v, want every host of the group", got)
+	}
+	for _, it := range m.l.Items() {
+		if r := it.(hostRow); r.hidden {
+			t.Fatalf("%s marked hidden on the group hosts screen", r.host)
+		}
+	}
+}
+
+func TestGroupHostsOutOfRangeIndexIsEmpty(t *testing.T) {
+	for _, i := range []int{-1, 2} {
+		m := groupHostsScreen(i, nil)
+		if len(m.l.Items()) != 0 || m.group.Name != "" {
+			t.Fatalf("index %d: rows %v group %q, want an empty screen", i, rowHosts(m.l.Items()), m.group.Name)
+		}
+	}
+}

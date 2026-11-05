@@ -10,8 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -56,45 +54,19 @@ type knownHostsReloadMsg struct {
 
 type hostsModel struct {
 	hostSelectList
-	connectActions
-	opts Options
-
-	width  int
-	height int
-
-	keymap keyMap
-
-	list   list.Model
-	search textinput.Model
-	focus  focusState
+	listScreen
 
 	reloading   bool
 	showHidden  bool
-	prevSearch  string
-	navPendingG bool
 	confirmQuit bool
-
-	showHelp       bool
-	helpVP         viewport.Model
-	cmdPrompt      bool
-	cmdPromptCrumb string
-	cmdInput       textinput.Model
 }
 
 func newHostsModel(opts Options) *hostsModel {
 	l := list.New(nil, hostDelegate{}, 0, 0) // items come from applyFilter below
 	l.Title = "Hosts"
-	configureList(&l)
-
-	search := newSearchInput()
-
 	m := &hostsModel{
 		hostSelectList: newHostSelectList(opts.Hosts),
-		opts:           opts,
-		keymap:         defaultKeyMap(),
-		list:           l,
-		search:         search,
-		focus:          focusList,
+		listScreen:     newListScreen(opts, l),
 	}
 	m.bindList(&m.list)
 	if !opts.Config.Defaults.LoadKnownHosts {
@@ -109,27 +81,11 @@ func (m *hostsModel) Init() tea.Cmd {
 }
 
 func (m *hostsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		m.layout()
+	if r, ok := msg.(knownHostsReloadMsg); ok {
+		m.reloaded(r)
 		return m, nil
-	case knownHostsReloadMsg:
-		m.reloaded(msg)
-		return m, nil
-	case tea.KeyMsg:
-		if cmd, ok := m.handleKey(msg); ok {
-			return m, cmd
-		}
-	case toastMsg:
-		return m, m.showToast(toast(msg), m.opts.Popup)
 	}
-	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
-}
-
-// layout sizes the list; View sizes the search box (see searchHeader).
-func (m *hostsModel) layout() {
-	m.list.SetSize(max(0, m.width-2), tabBoxListContentHeight(m.width, m.height))
+	return m, m.update(msg, m.overlayKey, m.keyActions, m.applyFilter)
 }
 
 func (m *hostsModel) reloaded(msg knownHostsReloadMsg) {
@@ -139,10 +95,6 @@ func (m *hostsModel) reloaded(msg knownHostsReloadMsg) {
 	m.opts.LoadErrors = msg.errs
 	m.setHosts(msg.res.Hosts)
 	m.toast = toast{text: fmt.Sprintf("%d hosts loaded", len(m.allHosts)), level: toastInfo}
-}
-
-func (m *hostsModel) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	return routeListKey(msg, m.overlayKey, m.keymap, &m.focus, &m.search, m.keyActions)
 }
 
 // overlayKey handles keys while help, the command prompt or a confirm
@@ -180,7 +132,7 @@ func (m *hostsModel) keyActions() []keyAction {
 		{keys: km.ToggleSel, inList: true, run: func() tea.Cmd { m.toggleCurrentSelection(); return nil }},
 		{keys: km.SelectAll, inList: true, run: func() tea.Cmd { m.selectAllFiltered(); return nil }},
 		{keys: km.ClearSel, inList: true, run: func() tea.Cmd { m.clearSelection(); return nil }},
-		{keys: km.ConnectCmd, inList: true, run: m.openCmdPrompt},
+		{keys: km.ConnectCmd, inList: true, run: func() tea.Cmd { return m.openCmdPromptFor("Hosts", m.hostsToOpen()) }},
 		{keys: km.Connect, run: m.enter},
 		{keys: km.OneWindow, inList: true, run: func() tea.Cmd {
 			m.toast = toast{}
@@ -228,21 +180,9 @@ func (m *hostsModel) reload() tea.Cmd {
 	)
 }
 
-func (m *hostsModel) openCmdPrompt() tea.Cmd {
-	targets := m.hostsToOpen()
-	if len(targets) == 0 {
-		return nil
-	}
-	m.cmdPromptCrumb = cmdPromptCrumb("Hosts", targets)
-	m.cmdInput = newCmdPromptInput(m.width, m.height)
-	m.cmdPrompt = true
-	return nil
-}
-
 // enter accepts the query in the search box, or connects from the list.
 func (m *hostsModel) enter() tea.Cmd {
-	if m.focus == focusSearch {
-		acceptSearch(&m.focus, &m.search, &m.prevSearch, len(m.list.Items()), m.applyFilter)
+	if m.acceptQuery(m.applyFilter) {
 		return nil
 	}
 	m.toast = toast{}
