@@ -16,17 +16,22 @@ import (
 // hk builds the key a terminal sends for s.
 func hk(s string) tea.KeyMsg {
 	special := map[string]tea.KeyMsg{
-		"enter":  {Type: tea.KeyEnter},
-		"esc":    {Type: tea.KeyEsc},
-		"tab":    {Type: tea.KeyTab},
-		"space":  {Type: tea.KeySpace, Runes: []rune{' '}},
-		"ctrl+a": {Type: tea.KeyCtrlA},
-		"ctrl+d": {Type: tea.KeyCtrlD},
-		"ctrl+f": {Type: tea.KeyCtrlF},
-		"ctrl+h": {Type: tea.KeyCtrlH},
-		"ctrl+o": {Type: tea.KeyCtrlO},
-		"alt+2":  {Type: tea.KeyRunes, Runes: []rune("2"), Alt: true},
-		"alt+3":  {Type: tea.KeyRunes, Runes: []rune("3"), Alt: true},
+		"enter":     {Type: tea.KeyEnter},
+		"esc":       {Type: tea.KeyEsc},
+		"tab":       {Type: tea.KeyTab},
+		"up":        {Type: tea.KeyUp},
+		"down":      {Type: tea.KeyDown},
+		"right":     {Type: tea.KeyRight},
+		"shift+tab": {Type: tea.KeyShiftTab},
+		"backspace": {Type: tea.KeyBackspace},
+		"space":     {Type: tea.KeySpace, Runes: []rune{' '}},
+		"ctrl+a":    {Type: tea.KeyCtrlA},
+		"ctrl+d":    {Type: tea.KeyCtrlD},
+		"ctrl+f":    {Type: tea.KeyCtrlF},
+		"ctrl+h":    {Type: tea.KeyCtrlH},
+		"ctrl+o":    {Type: tea.KeyCtrlO},
+		"alt+2":     {Type: tea.KeyRunes, Runes: []rune("2"), Alt: true},
+		"alt+3":     {Type: tea.KeyRunes, Runes: []rune("3"), Alt: true},
 	}
 	if k, ok := special[s]; ok {
 		return k
