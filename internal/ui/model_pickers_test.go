@@ -281,6 +281,13 @@ func TestGroupPickerSearch(t *testing.T) {
 }
 
 func TestGroupPickerAddingLines(t *testing.T) {
+	hostsN := func(n int, name string) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = name + string(rune('1'+i))
+		}
+		return out
+	}
 	for _, c := range []struct {
 		name  string
 		hosts []string
@@ -292,11 +299,24 @@ func TestGroupPickerAddingLines(t *testing.T) {
 		{"a few", []string{"a", "b", "c"}, 40, []string{"adding 3: a, b, c"}},
 		{"too narrow for names", []string{"alpha", "beta"}, 12, []string{"adding 2"}},
 		{"a long name is cut to fit", []string{"a-very-long-hostname-here"}, 20, []string{"adding: a-very-long…"}},
+		{"whole names wrap to the second line", hostsN(4, "alpha-"), 30,
+			[]string{"adding 4: alpha-1, alpha-2", "alpha-3, alpha-4"}},
+		{"the rest as +N more", hostsN(8, "server-0000"), 40,
+			[]string{"adding 8: server-00001, server-00002", "server-00003, server-00004, +4 more"}},
+		{"+N when +N more does not fit", hostsN(9, "h-0000000"), 40,
+			[]string{"adding 9: h-00000001, h-00000002", "h-00000003, h-00000004, h-00000005, +4"}},
+		{"a long name wraps whole", []string{"alpha-1", "very-long-host-name-x"}, 30,
+			[]string{"adding 2: alpha-1", "very-long-host-name-x"}},
+		{"a name too long for the second line is cut", []string{"alpha-1", "a-really-very-long-host-name-that-goes-on"}, 30,
+			[]string{"adding 2: alpha-1", "a-really-very-long-host-name-…"}},
 	} {
 		m := groupPicker(c.hosts...)
 		var got []string
 		for _, l := range m.addingLines(c.width) {
 			got = append(got, ansi.Strip(l))
+			if w := lipgloss.Width(l); w > c.width {
+				t.Errorf("%s: line %q is %d wide, more than %d", c.name, ansi.Strip(l), w, c.width)
+			}
 		}
 		if !slices.Equal(got, c.want) {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)

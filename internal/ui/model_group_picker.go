@@ -90,96 +90,95 @@ func (m *groupPickerModel) done() tea.Cmd {
 	return msgCmd(groupPickerDoneMsg{groupIndex: row.index})
 }
 
-// addingLines packs the pending host names into at most 2 lines, each fitting
-// within innerW. The first line is prefixed with "adding: " or "adding N: ".
-// If hosts overflow 2 lines, the last line ends with a dim "+N more" count.
-// Returns nil when no hosts are set.
+// addingLines shows the hosts being added on at most two lines that fit
+// innerW: "adding: a" or "adding N: a, b, ...", then names that do not fit
+// as a dim "+N more" (or "+N") at the end. Returns nil when no hosts are
+// set.
 func (m *groupPickerModel) addingLines(innerW int) []string {
-	if len(m.hosts) == 0 {
+	n := len(m.hosts)
+	if n == 0 {
 		return nil
 	}
-
 	prefix := "adding: "
-	if len(m.hosts) > 1 {
-		prefix = fmt.Sprintf("adding %d: ", len(m.hosts))
+	if n > 1 {
+		prefix = fmt.Sprintf("adding %d: ", n)
 	}
 	prefixW := lipgloss.Width(prefix)
-
-	// Narrow-width fallback: just show count, no individual names.
-	if innerW < prefixW+3 {
-		return []string{dim.Render(fmt.Sprintf("adding %d", len(m.hosts)))}
+	if innerW < prefixW+3 { // no room for names: the count only
+		return []string{dim.Render(fmt.Sprintf("adding %d", n))}
 	}
 
-	// Two-line budgets: line 0 is narrowed by the prefix, line 1 is full width.
-	budgets := [2]int{max(1, innerW-prefixW), max(1, innerW)}
-
-	type lineBuf struct {
-		hosts []string
-		usedW int
+	p := hostLines{widths: [2]int{innerW - prefixW, innerW}}
+	left := p.pack(m.hosts)
+	out := []string{dim.Render(prefix) + strings.Join(p.lines[0], hostSep)}
+	if len(p.lines[1]) > 0 {
+		out = append(out, strings.Join(p.lines[1], hostSep))
 	}
-	bufs := [2]lineBuf{}
-	li := 0
-
-	for i, h := range m.hosts {
-		sep := ""
-		if len(bufs[li].hosts) > 0 {
-			sep = ", "
-		}
-		sepW := lipgloss.Width(sep)
-
-		// Truncate hostname if it would exceed the remaining budget.
-		avail := budgets[li] - bufs[li].usedW - sepW
-		if avail < 1 {
-			avail = 1
-		}
-		h = truncateTail(h, avail)
-		tokenW := sepW + lipgloss.Width(h)
-
-		// On the last line, reserve room for a "+N more" trailer.
-		isLastBudget := li == len(budgets)-1
-		remaining := len(m.hosts) - i - 1
-		trailerW := 0
-		if isLastBudget && remaining > 0 {
-			trailerW = lipgloss.Width(fmt.Sprintf(", +%d more", remaining))
-			// If the long trailer doesn't fit, try a shorter form.
-			if bufs[li].usedW+tokenW+trailerW > budgets[li] {
-				trailerW = lipgloss.Width(fmt.Sprintf(", +%d", remaining))
-			}
-		}
-
-		if bufs[li].usedW+tokenW+trailerW <= budgets[li] || len(bufs[li].hosts) == 0 {
-			bufs[li].hosts = append(bufs[li].hosts, h)
-			bufs[li].usedW += tokenW
-		} else if li < len(budgets)-1 {
-			// Wrap to the next line.
-			li++
-			bufs[li].hosts = append(bufs[li].hosts, h)
-			bufs[li].usedW = lipgloss.Width(h)
-		} else {
-			// Last line is full — remaining hosts become the "+N more" count.
-			break
-		}
-	}
-
-	placed := len(bufs[0].hosts) + len(bufs[1].hosts)
-	leftOver := len(m.hosts) - placed
-
-	var out []string
-	for i, buf := range bufs {
-		if len(buf.hosts) == 0 {
-			continue
-		}
-		var sb strings.Builder
-		if i == 0 {
-			sb.WriteString(dim.Render(prefix))
-		}
-		sb.WriteString(strings.Join(buf.hosts, ", "))
-		if i == li && leftOver > 0 {
-			sb.WriteString(dim.Render(fmt.Sprintf(", +%d more", leftOver)))
-		}
-		out = append(out, sb.String())
+	if note := moreNote(p.used[len(out)-1], p.widths[len(out)-1], left); note != "" {
+		out[len(out)-1] += dim.Render(note)
 	}
 	return out
+}
+
+const hostSep = ", "
+
+// hostLines packs host names on two lines of fixed widths.
+type hostLines struct {
+	widths [2]int
+	lines  [2][]string
+	used   [2]int
+}
+
+// pack puts whole names on the first line, then on the second, and
+// returns how many names did not fit.
+func (p *hostLines) pack(hosts []string) (left int) {
+	li := 0
+	for i, h := range hosts {
+		rest := len(hosts) - i - 1
+		if p.add(li, h, rest) {
+			continue
+		}
+		if li == 1 {
+			return len(hosts) - i
+		}
+		li = 1
+		p.add(li, h, rest) // an empty line takes any name
+	}
+	return 0
+}
+
+// add puts h on line li and reports true. A name that does not fit after
+// others is not added (false); one alone on its line is cut to fit. While
+// rest names follow, the second line keeps room for their moreNote.
+func (p *hostLines) add(li int, h string, rest int) bool {
+	sepW := 0
+	if len(p.lines[li]) > 0 {
+		sepW = len(hostSep)
+	}
+	w := lipgloss.Width(h)
+	room := p.widths[li] - p.used[li] - sepW
+	if li == 1 {
+		room -= lipgloss.Width(moreNote(p.used[1]+sepW+w, p.widths[1], rest))
+	}
+	if w > room && sepW > 0 {
+		return false
+	}
+	h = truncateTail(h, max(1, room))
+	p.lines[li] = append(p.lines[li], h)
+	p.used[li] += sepW + lipgloss.Width(h)
+	return true
+}
+
+// moreNote counts n names left out: ", +N more" when it fits after usedW on
+// a line width wide, else ", +N", and "" when n is 0.
+func moreNote(usedW, width, n int) string {
+	if n == 0 {
+		return ""
+	}
+	if long := fmt.Sprintf(", +%d more", n); usedW+lipgloss.Width(long) <= width {
+		return long
+	}
+	return fmt.Sprintf(", +%d", n)
 }
 
 func (m *groupPickerModel) View() string {
