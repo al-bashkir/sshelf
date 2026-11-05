@@ -671,6 +671,42 @@ func TestRouterToggleHidden(t *testing.T) {
 			t.Fatalf("saved hidden hosts %v, hosts %+v, want web hidden in its config", inv.HiddenHosts, inv.Hosts)
 		}
 	})
+	t.Run("hide an already hidden host keeps one entry", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.HiddenHosts = []string{" db "}
+		m.Update(toggleHiddenHostMsg{host: "db", hide: true})
+		if got := savedInventory(t, m).HiddenHosts; !slices.Equal(got, []string{" db "}) {
+			t.Fatalf("saved hidden hosts %q, want the one old entry", got)
+		}
+	})
+	t.Run("hide a [host]:port entry flags its host's config", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(toggleHiddenHostMsg{host: "[web]:22", hide: true})
+		inv := savedInventory(t, m)
+		if len(inv.HiddenHosts) != 0 || len(inv.Hosts) != 1 || !inv.Hosts[0].Hidden {
+			t.Fatalf("saved hidden hosts %v, hosts %+v, want web hidden in its config", inv.HiddenHosts, inv.Hosts)
+		}
+	})
+	t.Run("show takes every match out of the list", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.HiddenHosts = []string{"db", "x", " db "}
+		m.Update(toggleHiddenHostMsg{host: "db", hide: false})
+		wantToast(t, "hosts", m.hosts.toast, "saved", toastOK)
+		if got := savedInventory(t, m).HiddenHosts; !slices.Equal(got, []string{"x"}) {
+			t.Fatalf("saved hidden hosts %q, want [x]", got)
+		}
+		if got := shownHosts(m.hosts); !slices.Equal(got, []string{"db", "web"}) {
+			t.Fatalf("hosts screen shows %v, want [db web]", got)
+		}
+	})
+	t.Run("show clears the flag in a host config", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.Hosts[0].Hidden = true
+		m.Update(toggleHiddenHostMsg{host: "web", hide: false})
+		if got := savedInventory(t, m).Hosts; len(got) != 1 || got[0].Hidden || got[0].User != "w" {
+			t.Fatalf("saved hosts %+v, want web shown with its config kept", got)
+		}
+	})
 	t.Run("a failed save shows the error", func(t *testing.T) {
 		m := routerApp(t)
 		blockSaves(t, m)

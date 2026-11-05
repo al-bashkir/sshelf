@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -46,14 +47,50 @@ func findHostConfig(inv config.Inventory, host string) (index int, hc config.Hos
 }
 
 func isHostHidden(inv config.Inventory, host string) bool {
-	h := strings.TrimSpace(host)
-	for _, hh := range inv.HiddenHosts {
-		if strings.TrimSpace(hh) == h {
-			return true
-		}
+	if slices.ContainsFunc(inv.HiddenHosts, isEntryFor(host)) {
+		return true
 	}
 	hc, ok := sshcmd.FindHostConfig(inv.Hosts, host)
 	return ok && hc.Hidden
+}
+
+// isEntryFor matches the hidden_hosts entries that name host.
+func isEntryFor(host string) func(entry string) bool {
+	h := strings.TrimSpace(host)
+	return func(entry string) bool { return strings.TrimSpace(entry) == h }
+}
+
+// hideHost returns inv with host hidden: flagged in its own [[hosts]]
+// entry, or else named once in the compact hidden_hosts list.
+func hideHost(inv config.Inventory, host string) config.Inventory {
+	if flagged, ok := flagHidden(inv, host, true); ok {
+		return flagged
+	}
+	if !slices.ContainsFunc(inv.HiddenHosts, isEntryFor(host)) {
+		inv.HiddenHosts = append(slices.Clone(inv.HiddenHosts), strings.TrimSpace(host))
+	}
+	return inv
+}
+
+// showHost returns inv with host shown: out of hidden_hosts and, for old
+// configs that flag it there, unflagged in its [[hosts]] entry.
+func showHost(inv config.Inventory, host string) config.Inventory {
+	inv.HiddenHosts = slices.DeleteFunc(slices.Clone(inv.HiddenHosts), isEntryFor(host))
+	inv, _ = flagHidden(inv, host, false)
+	return inv
+}
+
+// flagHidden sets the hidden flag in host's own [[hosts]] entry. ok is
+// false, and inv unchanged, when host has no entry.
+func flagHidden(inv config.Inventory, host string, hidden bool) (config.Inventory, bool) {
+	idx, hc := findHostConfig(inv, host)
+	if idx < 0 {
+		return inv, false
+	}
+	hc.Hidden = hidden
+	inv.Hosts = slices.Clone(inv.Hosts)
+	inv.Hosts[idx] = hc
+	return inv, true
 }
 
 // hostIndex answers FindHostConfig and isHostHidden in O(1). Built once per

@@ -679,49 +679,10 @@ func (m *appModel) removeHostsFromGroup(groupIndex int, hostsToRemove []string) 
 }
 
 func (m *appModel) saveToggleHidden(host string, hide bool) error {
-	newInv := m.opts.Inventory
-	h := strings.TrimSpace(host)
-
-	// Work on independent copies of mutable slices.
-	newInv.HiddenHosts = append([]string(nil), newInv.HiddenHosts...)
-	newInv.Hosts = append([]config.Host(nil), newInv.Hosts...)
-
-	idx, hc := findHostConfig(newInv, host)
-
 	if hide {
-		if idx >= 0 {
-			// Host has existing [[hosts]] entry — set Hidden there.
-			hc.Hidden = true
-			newInv.Hosts[idx] = hc
-		} else {
-			// No per-host config — use compact list.
-			present := false
-			for _, hh := range newInv.HiddenHosts {
-				if strings.TrimSpace(hh) == h {
-					present = true
-					break
-				}
-			}
-			if !present {
-				newInv.HiddenHosts = append(newInv.HiddenHosts, h)
-			}
-		}
-	} else {
-		// Remove from compact list (safe even if not present).
-		out := newInv.HiddenHosts[:0]
-		for _, hh := range newInv.HiddenHosts {
-			if strings.TrimSpace(hh) != h {
-				out = append(out, hh)
-			}
-		}
-		newInv.HiddenHosts = out
-		// Also clear Hidden flag in [[hosts]] entry if set (handles old-format configs).
-		if idx >= 0 && hc.Hidden {
-			hc.Hidden = false
-			newInv.Hosts[idx] = hc
-		}
+		return m.commitInventory(hideHost(m.opts.Inventory, host))
 	}
-	return m.commitInventory(newInv)
+	return m.commitInventory(showHost(m.opts.Inventory, host))
 }
 
 func (m *appModel) IsQuitting() bool { return m.quitting }
