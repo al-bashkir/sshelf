@@ -26,74 +26,49 @@ func placeCentered(fullW, fullH int, box string) string {
 	return lipgloss.Place(fullW, fullH, lipgloss.Center, lipgloss.Center, box)
 }
 
+// modalSize fits a modal into a fullW x fullH terminal (0 or less: unknown).
 func modalSize(fullW, fullH int, maxW, maxH int, marginW, marginH int) (w, h int) {
-	// width
-	w = maxW
-	if fullW > 0 {
-		w = fullW - marginW
-		if w < 0 {
-			w = 0
-		}
-	}
-	if maxW > 0 && w > maxW {
-		w = maxW
-	}
-	if fullW > 0 {
-		if w <= 0 {
-			w = fullW
-		}
-		if w > fullW {
-			w = fullW
-		}
-	}
+	return fitAxis(fullW, maxW, marginW), fitAxis(fullH, maxH, marginH)
+}
 
-	// height
-	h = maxH
-	if fullH > 0 {
-		h = fullH - marginH
-		if h < 0 {
-			h = 0
-		}
+// fitAxis sizes one axis: the terminal minus the margin, capped at limit
+// (0 or less: no cap). With no room for the margin, it takes the full axis.
+// An unknown terminal size gives limit.
+func fitAxis(full, limit, margin int) int {
+	if full <= 0 {
+		return limit
 	}
-	if maxH > 0 && h > maxH {
-		h = maxH
+	v := full - margin
+	if limit > 0 {
+		v = min(v, limit)
 	}
-	if fullH > 0 {
-		if h <= 0 {
-			h = fullH
-		}
-		if h > fullH {
-			h = fullH
-		}
+	if v <= 0 {
+		return full
 	}
+	return min(v, full)
+}
 
+// fitModal is modalSize that falls back to the full height when fewer than
+// minH rows are left, for very small terminals.
+func fitModal(fullW, fullH, maxW, maxH, marginW, marginH, minH int) (w, h int) {
+	w, h = modalSize(fullW, fullH, maxW, maxH, marginW, marginH)
+	if fullH > 0 && h < minH {
+		h = fullH
+	}
 	return w, h
 }
 
 func groupFormModalSize(fullW, fullH int) (w, h int) {
 	// Big form: keep almost full height if needed.
-	w, h = modalSize(fullW, fullH, modalMaxWGroup, modalMaxHGroup, 4, 1)
-	if fullH > 0 && h < 16 {
-		// Fallback to full height in very small terminals.
-		h = fullH
-	}
-	return w, h
+	return fitModal(fullW, fullH, modalMaxWGroup, modalMaxHGroup, 4, 1, 16)
 }
 
 func hostFormModalSize(fullW, fullH int) (w, h int) {
-	w, h = modalSize(fullW, fullH, modalMaxWHost, modalMaxHHost, 6, 4)
-	if fullH > 0 && h < 12 {
-		h = fullH
-	}
-	return w, h
+	return fitModal(fullW, fullH, modalMaxWHost, modalMaxHHost, 6, 4, 12)
 }
 
 func pickerModalSize(fullW, fullH int) (w, h int) {
-	w, h = modalSize(fullW, fullH, modalMaxWPicker, modalMaxHPicker, 6, 6)
-	if fullH > 0 && h < 10 {
-		h = fullH
-	}
-	return w, h
+	return fitModal(fullW, fullH, modalMaxWPicker, modalMaxHPicker, 6, 6, 10)
 }
 
 func customHostModalSize(fullW, fullH int) (w, h int) {
