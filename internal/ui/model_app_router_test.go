@@ -1,12 +1,14 @@
 package ui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -311,6 +313,14 @@ func TestRouterHostPicker(t *testing.T) {
 		}
 		wantToast(t, "group hosts", m.gh.toast, "added 1", toastOK)
 		wantSize(t, "group hosts", m.gh.width, m.gh.height, nil, 100, 30)
+	})
+	t.Run("done with no hosts writes nothing", func(t *testing.T) {
+		m := open(t)
+		m.Update(hostPickerDoneMsg{})
+		wantToast(t, "group hosts", m.gh.toast, "added 0", toastOK)
+		if _, err := os.Stat(m.opts.InventoryPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("inventory file written for no hosts: %v", err)
+		}
 	})
 	t.Run("done from Groups toasts there", func(t *testing.T) {
 		m := routerApp(t)
@@ -991,4 +1001,74 @@ func TestRouterView(t *testing.T) {
 			t.Fatal("unknown screen does not show the hosts view")
 		}
 	})
+}
+
+func TestRouterToastTimer(t *testing.T) {
+	m := routerApp(t)
+	m.Update(openGroupHostsMsg{index: 1})
+	m.Update(switchScreenMsg{to: screenGroups})
+	if m.toastToken != 0 {
+		t.Fatalf("token %d before any toast, want 0", m.toastToken)
+	}
+
+	if _, cmd := m.Update(deleteGroupMsg{index: 0}); m.toastToken != 1 || cmd == nil {
+		t.Fatalf("new toast: token %d, cmd nil=%v; want a timer with token 1", m.toastToken, cmd == nil)
+	}
+	if _, cmd := m.Update(switchScreenMsg{to: screenGroups}); m.toastToken != 1 || cmd != nil {
+		t.Fatal("a message that shows no new toast started a timer")
+	}
+	if _, cmd := m.Update(deleteGroupMsg{index: 0}); m.toastToken != 1 || cmd != nil {
+		t.Fatal("the same toast text started a second timer")
+	}
+	m.Update(deleteGroupMsg{index: 0}) // no groups left: an error toast
+	if m.toastToken != 2 {
+		t.Fatalf("changed toast: token %d, want 2", m.toastToken)
+	}
+
+	m.hosts.toast = toast{text: "h", level: toastOK}
+	m.gh.toast = toast{text: "g", level: toastOK}
+	m.Update(toastDismissMsg{token: 1})
+	wantToast(t, "groups after a stale timer", m.groups.toast, "invalid group index", toastErr)
+
+	if _, cmd := m.Update(toastDismissMsg{token: 2}); cmd != nil || m.toastToken != 2 {
+		t.Fatal("clearing the toasts started a timer")
+	}
+	for name, got := range map[string]toast{"hosts": m.hosts.toast, "groups": m.groups.toast, "group hosts": m.gh.toast} {
+		if !got.empty() {
+			t.Fatalf("%s toast %q not cleared", name, got.text)
+		}
+	}
+}
+
+func TestRouterSpinnerTick(t *testing.T) {
+	active, index, minEnd := spinnerActive, spinnerIndex, spinnerMinEnd
+	t.Cleanup(func() { spinnerActive, spinnerIndex, spinnerMinEnd = active, index, minEnd })
+	past, future := time.Now().Add(-time.Second), time.Now().Add(time.Hour)
+
+	cases := []struct {
+		name       string
+		active     bool
+		minEnd     time.Time
+		reloading  bool
+		wantTick   bool
+		wantActive bool
+	}{
+		{"off: nothing", false, past, false, false, false},
+		{"in its minimum time: keeps ticking", true, future, false, true, true},
+		{"minimum time over, reload done: stops", true, past, false, false, false},
+		{"minimum time over, still reloading: keeps ticking", true, past, true, true, true},
+		{"no minimum time: keeps ticking", true, time.Time{}, false, true, true},
+	}
+	for _, c := range cases {
+		m := routerApp(t)
+		spinnerActive, spinnerIndex, spinnerMinEnd = c.active, 0, c.minEnd
+		m.hosts.reloading = c.reloading
+		_, cmd := m.Update(spinnerTickMsg{})
+		if (cmd != nil) != c.wantTick || spinnerActive != c.wantActive {
+			t.Fatalf("%s: tick=%v active=%v, want tick=%v active=%v", c.name, cmd != nil, spinnerActive, c.wantTick, c.wantActive)
+		}
+		if wantIndex := map[bool]int{true: 1, false: 0}[c.active]; spinnerIndex != wantIndex {
+			t.Fatalf("%s: frame %d, want %d", c.name, spinnerIndex, wantIndex)
+		}
+	}
 }

@@ -302,43 +302,25 @@ func (m *appModel) breadcrumb() string {
 	}
 }
 
+// Update handles msg, then starts a timer to clear the toasts when a new
+// one shows.
 func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Spinner tick.
-	if _, ok := msg.(spinnerTickMsg); ok {
-		if spinnerActive {
-			spinnerIndex++
-			// Check if minimum duration has elapsed and work is done.
-			if !spinnerMinEnd.IsZero() && time.Now().After(spinnerMinEnd) && !m.hosts.reloading {
-				spinnerActive = false
-				return m, nil
-			}
-			return m, tea.Tick(spinnerTickInterval, func(time.Time) tea.Msg { return spinnerTickMsg{} })
-		}
-		return m, nil
-	}
-
-	// Auto-dismiss toasts.
-	if tdm, ok := msg.(toastDismissMsg); ok {
-		if tdm.token == m.toastToken {
-			m.clearToasts()
-		}
-		return m, nil
-	}
-
 	prev := m.collectToastKey()
 	result, cmd := m.doUpdate(msg)
-	cur := m.collectToastKey()
-
-	if cur != "" && cur != prev {
-		m.toastToken++
-		token := m.toastToken
-		level := m.maxToastLevel()
-		dismiss := tea.Tick(toastDuration(level), func(time.Time) tea.Msg {
-			return toastDismissMsg{token: token}
-		})
-		return result, tea.Batch(cmd, dismiss)
+	if cur := m.collectToastKey(); cur != "" && cur != prev {
+		return result, tea.Batch(cmd, m.toastTimer())
 	}
 	return result, cmd
+}
+
+// toastTimer starts the timer that clears the toasts now showing; the
+// worst level sets how long they stay.
+func (m *appModel) toastTimer() tea.Cmd {
+	m.toastToken++
+	token := m.toastToken
+	return tea.Tick(toastDuration(m.maxToastLevel()), func(time.Time) tea.Msg {
+		return toastDismissMsg{token: token}
+	})
 }
 
 func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -348,7 +330,6 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case appMsg:
 		return m, msg.apply(m)
 	}
-
 	return m, m.forward(msg)
 }
 

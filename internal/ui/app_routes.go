@@ -47,6 +47,28 @@ func (m *appModel) returnAfterAdd(s screen, i, added int) {
 	m.screen = s
 }
 
+func (spinnerTickMsg) apply(m *appModel) tea.Cmd {
+	if !spinnerActive {
+		return nil
+	}
+	spinnerIndex++
+	// Stop once the minimum time has passed and the reload is done.
+	if !spinnerMinEnd.IsZero() && time.Now().After(spinnerMinEnd) && !m.hosts.reloading {
+		spinnerActive = false
+		return nil
+	}
+	return tea.Tick(spinnerTickInterval, func(time.Time) tea.Msg { return spinnerTickMsg{} })
+}
+
+// toastDismissMsg clears the toasts only for the latest timer; a newer
+// toast restarted the timer and keeps its own time.
+func (msg toastDismissMsg) apply(m *appModel) tea.Cmd {
+	if msg.token == m.toastToken {
+		m.clearToasts()
+	}
+	return nil
+}
+
 func (msg switchScreenMsg) apply(m *appModel) tea.Cmd {
 	m.screen = msg.to
 	return nil
