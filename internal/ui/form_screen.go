@@ -52,6 +52,7 @@ func (s *formScreen) update(msg tea.Msg, h formHooks) tea.Cmd {
 
 // key sends a key to the open sub-modal, the unsaved-changes question,
 // insert mode or the picker, in that order, and otherwise to normalKey.
+// Ctrl+S saves from insert mode too, as its footer says.
 func (s *formScreen) key(msg tea.KeyMsg, h formHooks) tea.Cmd {
 	switch {
 	case s.borderPicker != nil:
@@ -59,6 +60,8 @@ func (s *formScreen) key(msg tea.KeyMsg, h formHooks) tea.Cmd {
 		return cmd
 	case s.form.askingDiscard():
 		return s.form.handleDiscardKey(msg, &s.toast)
+	case s.form.editing && key.Matches(msg, s.keymap.Save):
+		return s.save(h.save)
 	case s.form.editing || s.form.picker != nil:
 		_, cmd := s.form.handleKey(msg)
 		return cmd

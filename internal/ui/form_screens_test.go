@@ -103,6 +103,27 @@ func TestFormScreensSaveWithCtrlS(t *testing.T) {
 	}
 }
 
+// The footer offers Ctrl+S in insert mode: it ends insert mode and saves
+// what was typed. The typed key's command is a cursor blink, so it does
+// not run.
+func TestFormScreensSaveFromInsertMode(t *testing.T) {
+	for _, c := range formScreenCases() {
+		t.Run(c.name, func(t *testing.T) {
+			m := c.new()
+			m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+			keys(m, c.toUser...)
+			m.Update(hk("i"))
+			m.Update(hk("ops"))
+			if user, ok := c.savedUser(keys(m, "ctrl+s")); !ok || user != "ops" {
+				t.Fatalf("Ctrl+S in insert mode saved user %q (ok=%v), want ops", user, ok)
+			}
+			if strings.Contains(plainView(m), "INSERT") {
+				t.Fatal("still in insert mode after Ctrl+S")
+			}
+		})
+	}
+}
+
 func TestFormScreensKeepBadValues(t *testing.T) {
 	for _, c := range formScreenCases() {
 		t.Run(c.name, func(t *testing.T) {
