@@ -357,3 +357,7 @@ func (m *groupHostsModel) handleConnectWithRemoteCommand(remoteCmd string) tea.C
 	}
 	return m.connect(m.hostsToOpen(), m.opts, &m.group, false, remoteCmd)
 }
+
+func (m *groupHostsModel) refreshAccentStyles() {
+	restyleListInputs(&m.search, &m.cmdInput, m.focus == focusSearch, m.cmdPrompt)
+}

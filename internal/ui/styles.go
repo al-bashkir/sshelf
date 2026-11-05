@@ -666,3 +666,12 @@ func statusDot(ok bool, hasWarnings bool) string {
 	}
 	return statusOK.Render("●")
 }
+
+// restyleListInputs gives a list screen's search bar and, while it is open,
+// its command prompt the current accent.
+func restyleListInputs(search, cmdInput *textinput.Model, searching, cmdPrompt bool) {
+	setSearchBarFocused(search, searching)
+	if cmdPrompt {
+		setSearchFocused(cmdInput, true)
+	}
+}

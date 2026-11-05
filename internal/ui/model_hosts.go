@@ -391,3 +391,7 @@ func reloadKnownHostsCmd(paths []string) tea.Cmd {
 		return knownHostsReloadMsg{res: res, errs: errs}
 	}
 }
+
+func (m *hostsModel) refreshAccentStyles() {
+	restyleListInputs(&m.search, &m.cmdInput, m.focus == focusSearch, m.cmdPrompt)
+}

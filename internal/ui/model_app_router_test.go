@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -429,6 +430,125 @@ func TestRouterDefaultsForm(t *testing.T) {
 		m.defaultsForm.toast = toast{text: "other", level: toastWarn}
 		m.Update(defaultsToastExpireMsg{token: m.defaultsToastToken})
 		wantToast(t, "settings", m.defaultsForm.toast, "other", toastWarn)
+	})
+	t.Run("turning known_hosts off lists the inventory hosts", func(t *testing.T) {
+		m := open(t)
+		m.opts.SkippedLines = 2
+		d := m.opts.Config.Defaults
+		d.LoadKnownHosts = false
+		m.Update(defaultsFormSaveMsg{defaults: d})
+
+		want := config.ConfigHosts(m.opts.Inventory)
+		if m.opts.KnownHosts != nil || !slices.Equal(m.opts.Hosts, want) || m.opts.SkippedLines != 0 || m.opts.LoadErrors != nil {
+			t.Fatalf("known=%v hosts=%v skipped=%d errs=%v, want the inventory hosts %v and nothing else",
+				m.opts.KnownHosts, m.opts.Hosts, m.opts.SkippedLines, m.opts.LoadErrors, want)
+		}
+		if got := shownHosts(m.hosts); !slices.Equal(slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(want))) {
+			t.Fatalf("hosts screen shows %v, want %v", got, want)
+		}
+		if m.hosts.keymap.Reload.Enabled() {
+			t.Fatal("reload key still on without known_hosts")
+		}
+	})
+	t.Run("turning known_hosts on reads the files", func(t *testing.T) {
+		m := open(t)
+		m.opts.Config.Defaults.LoadKnownHosts = false
+		m.hosts.keymap.Reload.SetEnabled(false)
+		file := filepath.Join(t.TempDir(), "known_hosts")
+		if err := os.WriteFile(file, []byte("alpha ssh-ed25519 AAAAC3NzaC1lZDI1NTE5\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		m.opts.KnownHosts = []string{file}
+		d := m.opts.Config.Defaults
+		d.LoadKnownHosts = true
+		m.Update(defaultsFormSaveMsg{defaults: d})
+
+		if !slices.Equal(m.opts.KnownHosts, []string{file}) || !slices.Equal(m.opts.Hosts, []string{"alpha"}) {
+			t.Fatalf("known=%v hosts=%v, want %s read for [alpha]", m.opts.KnownHosts, m.opts.Hosts, file)
+		}
+		if got := shownHosts(m.hosts); !slices.Equal(got, []string{"alpha"}) {
+			t.Fatalf("hosts screen shows %v, want [alpha]", got)
+		}
+		if !m.hosts.keymap.Reload.Enabled() {
+			t.Fatal("reload key off with known_hosts")
+		}
+	})
+	t.Run("turning known_hosts on with no files reads the default file", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		file := filepath.Join(home, ".ssh", "known_hosts")
+		if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte("beta ssh-ed25519 AAAAC3NzaC1lZDI1NTE5\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		m := open(t)
+		m.opts.Config.Defaults.LoadKnownHosts = false
+		d := m.opts.Config.Defaults
+		d.LoadKnownHosts = true
+		m.Update(defaultsFormSaveMsg{defaults: d})
+
+		if !slices.Equal(m.opts.KnownHosts, []string{file}) || !slices.Equal(m.opts.Hosts, []string{"beta"}) {
+			t.Fatalf("known=%v hosts=%v, want the default file read for [beta]", m.opts.KnownHosts, m.opts.Hosts)
+		}
+	})
+	t.Run("the new defaults reach every list screen", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(openGroupHostsMsg{index: 0})
+		m.Update(openDefaultsFormMsg{returnTo: screenGroupHosts})
+		d := m.opts.Config.Defaults
+		d.ConnectConfirmThreshold = 9
+		m.Update(defaultsFormSaveMsg{defaults: d})
+		for name, got := range map[string]config.Defaults{
+			"hosts": m.hosts.opts.Config.Defaults, "groups": m.groups.opts.Config.Defaults, "group hosts": m.gh.opts.Config.Defaults,
+		} {
+			if got.ConnectConfirmThreshold != 9 {
+				t.Fatalf("%s still has threshold %d", name, got.ConnectConfirmThreshold)
+			}
+		}
+	})
+	t.Run("a new accent restyles every open input", func(t *testing.T) {
+		t.Cleanup(func() { ApplyColorScheme("", "") })
+		m := routerApp(t)
+		m.hosts.focus, m.hosts.cmdPrompt = focusSearch, true
+		m.groups.focus, m.groups.cmdPrompt = focusSearch, true
+		m.Update(openGroupHostsMsg{index: 0})
+		m.gh.focus, m.gh.cmdPrompt = focusSearch, true
+		m.Update(openHostPickerMsg{groupIndex: 0, returnTo: screenGroupHosts})
+		m.picker.focus = focusSearch
+		m.Update(openGroupPickerMsg{hosts: []string{"db"}})
+		m.gp.focus = focusSearch
+		m.Update(openCustomHostMsg{returnTo: screenHosts, groupIndex: -1})
+		m.Update(openGroupFormMsg{index: 0})
+		m.Update(openHostFormMsg{host: "web", returnTo: screenHosts})
+		m.Update(openDefaultsFormMsg{returnTo: screenHosts})
+
+		old := cAccent
+		d := m.opts.Config.Defaults
+		d.AccentColor = "#ff0000"
+		m.Update(defaultsFormSaveMsg{defaults: d})
+		if cAccent == old {
+			t.Fatal("accent did not change")
+		}
+
+		accented := func(ti textinput.Model) bool { return ti.PromptStyle.GetForeground() == cAccent }
+		anyAccented := func(f formModel) bool {
+			return slices.ContainsFunc(f.inputs, func(in formTextInput) bool { return accented(in.input) })
+		}
+		for name, ok := range map[string]bool{
+			"hosts search": accented(m.hosts.search), "hosts command": accented(m.hosts.cmdInput),
+			"groups search": accented(m.groups.search), "groups command": accented(m.groups.cmdInput),
+			"group hosts search": accented(m.gh.search), "group hosts command": accented(m.gh.cmdInput),
+			"picker search": accented(m.picker.search), "group picker search": accented(m.gp.search),
+			"custom host": accented(m.customHost.input),
+			"group form":  anyAccented(m.form.form), "host form": anyAccented(m.hostForm.form),
+			"settings": anyAccented(m.defaultsForm.form),
+		} {
+			if !ok {
+				t.Fatalf("%s does not use the new accent", name)
+			}
+		}
 	})
 	t.Run("a failed save keeps the old defaults", func(t *testing.T) {
 		m := open(t)

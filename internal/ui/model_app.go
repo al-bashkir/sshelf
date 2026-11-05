@@ -485,109 +485,55 @@ func (m *appModel) commitInventory(newInv config.Inventory) error {
 	return nil
 }
 
+// saveDefaults saves the settings and gives them to every list screen.
+// Settings opens only from a list screen (Hosts, Groups, Group hosts) and
+// every modal closes before it leaves, so no picker or form is open here.
 func (m *appModel) saveDefaults(d config.Defaults) error {
-	oldLoadKnownHosts := m.opts.Config.Defaults.LoadKnownHosts
-	oldKnownPaths := append([]string(nil), m.opts.KnownHosts...)
-
-	newCfg := m.opts.Config
-	newCfg.Defaults = d
-	if _, err := config.Save(m.opts.ConfigPath, &newCfg); err != nil {
+	cfg := m.opts.Config
+	cfg.Defaults = d
+	if _, err := config.Save(m.opts.ConfigPath, &cfg); err != nil {
 		return err
 	}
-
-	m.opts.Config = newCfg
-	ApplyColorScheme(newCfg.Defaults.Colorscheme, newCfg.Defaults.AccentColor)
+	toggled := d.LoadKnownHosts != m.opts.Config.Defaults.LoadKnownHosts
+	m.opts.Config = cfg
+	ApplyColorScheme(d.Colorscheme, d.AccentColor)
 	m.refreshAccentStyles()
-
-	// Update hosts source if load_known_hosts toggled.
-	if oldLoadKnownHosts != newCfg.Defaults.LoadKnownHosts {
-		if newCfg.Defaults.LoadKnownHosts {
-			if len(oldKnownPaths) != 0 {
-				m.opts.KnownHosts = oldKnownPaths
-			}
-			if len(m.opts.KnownHosts) == 0 {
-				m.opts.KnownHosts = hosts.DefaultKnownHostsPaths()
-			}
-			res, errs := hosts.LoadKnownHosts(m.opts.KnownHosts)
-			m.opts.Hosts = res.Hosts
-			m.opts.SkippedLines = res.SkippedLines
-			m.opts.LoadErrors = errs
-		} else {
-			m.opts.KnownHosts = nil
-			m.opts.Hosts = config.ConfigHosts(m.opts.Inventory)
-			m.opts.SkippedLines = 0
-			m.opts.LoadErrors = nil
-		}
-
-		if m.hosts != nil {
-			m.hosts.keymap.Reload.SetEnabled(newCfg.Defaults.LoadKnownHosts)
-			m.hosts.opts = m.opts
-			_, _ = m.hosts.Update(knownHostsReloadMsg{res: hosts.LoadResult{Hosts: m.opts.Hosts, SkippedLines: m.opts.SkippedLines}, errs: m.opts.LoadErrors})
-		}
-		if m.picker != nil {
-			// Recreate to refresh list source.
-			m.picker = newHostPickerModel(m.opts)
-			m.sizeOnOpen(screenHostPicker)
-		}
+	if toggled {
+		m.reloadHostSource()
 	}
-	if m.hosts != nil {
-		m.hosts.opts = m.opts
-		m.hosts.refreshVisibleBadges(m.opts.Inventory)
-	}
-	if m.groups != nil {
-		m.groups.opts = m.opts
-		m.groups.Refresh(m.opts.Inventory)
-	}
+	m.hosts.opts = m.opts
+	m.groups.opts = m.opts
 	if m.gh != nil {
 		m.gh.opts = m.opts
-		m.gh.refreshVisibleBadges(m.opts.Inventory)
-	}
-	if m.picker != nil {
-		m.picker.opts = m.opts
-		m.picker.refreshVisibleBadges(m.opts.Inventory)
-	}
-	if m.gp != nil {
-		m.gp.opts = m.opts
 	}
 	return nil
 }
 
+// reloadHostSource reads the host list again after load_known_hosts
+// changed: the known_hosts files when it is on, the inventory when off.
+func (m *appModel) reloadHostSource() {
+	on := m.opts.Config.Defaults.LoadKnownHosts
+	if on {
+		if len(m.opts.KnownHosts) == 0 {
+			m.opts.KnownHosts = hosts.DefaultKnownHostsPaths()
+		}
+		res, errs := hosts.LoadKnownHosts(m.opts.KnownHosts)
+		m.opts.Hosts, m.opts.SkippedLines, m.opts.LoadErrors = res.Hosts, res.SkippedLines, errs
+	} else {
+		m.opts.KnownHosts = nil
+		m.opts.Hosts, m.opts.SkippedLines, m.opts.LoadErrors = config.ConfigHosts(m.opts.Inventory), 0, nil
+	}
+	m.hosts.keymap.Reload.SetEnabled(on)
+	m.hosts.opts = m.opts
+	_, _ = m.hosts.Update(knownHostsReloadMsg{res: hosts.LoadResult{Hosts: m.opts.Hosts, SkippedLines: m.opts.SkippedLines}, errs: m.opts.LoadErrors})
+}
+
+// refreshAccentStyles restyles every open screen after the accent changed.
 func (m *appModel) refreshAccentStyles() {
-	if m.hosts != nil {
-		setSearchBarFocused(&m.hosts.search, m.hosts.focus == focusSearch)
-		if m.hosts.cmdPrompt {
-			setSearchFocused(&m.hosts.cmdInput, true)
+	for _, sm := range m.screenModels() {
+		if s, ok := sm.model.(interface{ refreshAccentStyles() }); ok {
+			s.refreshAccentStyles()
 		}
-	}
-	if m.groups != nil {
-		setSearchBarFocused(&m.groups.search, m.groups.focus == focusSearch)
-		if m.groups.cmdPrompt {
-			setSearchFocused(&m.groups.cmdInput, true)
-		}
-	}
-	if m.gh != nil {
-		setSearchBarFocused(&m.gh.search, m.gh.focus == focusSearch)
-		if m.gh.cmdPrompt {
-			setSearchFocused(&m.gh.cmdInput, true)
-		}
-	}
-	if m.picker != nil {
-		setSearchBarFocused(&m.picker.search, m.picker.focus == focusSearch)
-	}
-	if m.gp != nil {
-		setSearchBarFocused(&m.gp.search, m.gp.focus == focusSearch)
-	}
-	if m.customHost != nil {
-		setSearchFocused(&m.customHost.input, true)
-	}
-	if m.defaultsForm != nil {
-		m.defaultsForm.refreshAccentStyles()
-	}
-	if m.form != nil {
-		m.form.refreshAccentStyles()
-	}
-	if m.hostForm != nil {
-		m.hostForm.refreshAccentStyles()
 	}
 }
 

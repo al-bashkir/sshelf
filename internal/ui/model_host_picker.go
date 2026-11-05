@@ -176,3 +176,7 @@ func (m *hostPickerModel) statusLine() string {
 func (m *hostPickerModel) applyFilter(query string) {
 	m.filter(query, m.opts.Inventory, false, false)
 }
+
+func (m *hostPickerModel) refreshAccentStyles() {
+	setSearchBarFocused(&m.search, m.focus == focusSearch)
+}

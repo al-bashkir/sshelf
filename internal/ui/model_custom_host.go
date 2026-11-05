@@ -108,3 +108,5 @@ func (m *customHostModel) View() string {
 
 	return renderFocusedFrame(m.width, m.height, title, "", strings.TrimRight(b.String(), "\n"), footer)
 }
+
+func (m *customHostModel) refreshAccentStyles() { setSearchFocused(&m.input, true) }

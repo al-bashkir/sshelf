@@ -322,3 +322,7 @@ func (m *groupPickerModel) applyFilter(query string) {
 		m.list.Select(0)
 	}
 }
+
+func (m *groupPickerModel) refreshAccentStyles() {
+	setSearchBarFocused(&m.search, m.focus == focusSearch)
+}
