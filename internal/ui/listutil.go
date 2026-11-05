@@ -5,6 +5,26 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 )
 
+// searchList is a list with a search box: the core of the list screens
+// (listScreen) and the pickers (pickerScreen).
+type searchList struct {
+	opts          Options
+	width, height int
+
+	keymap     keyMap
+	list       list.Model
+	search     textinput.Model
+	focus      focusState
+	prevSearch string
+	showHelp   bool
+}
+
+// newSearchList builds a search list around l, with the list focused.
+func newSearchList(opts Options, l list.Model) searchList {
+	configureList(&l)
+	return searchList{opts: opts, keymap: defaultKeyMap(), list: l, search: newSearchInput(), focus: focusList}
+}
+
 // newSearchInput creates a pre-configured search textinput used by all list screens.
 func newSearchInput() textinput.Model {
 	search := textinput.New()

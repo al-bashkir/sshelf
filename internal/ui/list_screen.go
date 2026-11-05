@@ -12,19 +12,9 @@ import (
 // Each screen embeds it, so the fields read as m.list, m.search, ...
 type listScreen struct {
 	connectActions
-	opts Options
-
-	width  int
-	height int
-
-	keymap      keyMap
-	list        list.Model
-	search      textinput.Model
-	focus       focusState
-	prevSearch  string
+	searchList
 	navPendingG bool
 
-	showHelp       bool
 	helpVP         viewport.Model
 	cmdPrompt      bool
 	cmdPromptCrumb string
@@ -33,8 +23,7 @@ type listScreen struct {
 
 // newListScreen builds a list screen around l, with the list focused.
 func newListScreen(opts Options, l list.Model) listScreen {
-	configureList(&l)
-	return listScreen{opts: opts, keymap: defaultKeyMap(), list: l, search: newSearchInput(), focus: focusList}
+	return listScreen{searchList: newSearchList(opts, l)}
 }
 
 // update is the Update the list screens share: size the list, route keys

@@ -118,7 +118,7 @@ func (m *hostsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 func (m *hostsModel) keyActions() []keyAction {
 	km := m.keymap
-	return []keyAction{
+	return append(m.selectionActions(km), []keyAction{
 		{keys: km.GroupsTab, run: func() tea.Cmd { return msgCmd(switchScreenMsg{to: screenGroups}) }},
 		{keys: km.Settings, run: func() tea.Cmd { return msgCmd(openDefaultsFormMsg{returnTo: screenHosts}) }},
 		{keys: km.Quit, inList: true, run: m.quit},
@@ -129,9 +129,6 @@ func (m *hostsModel) keyActions() []keyAction {
 			return nil
 		}},
 		{keys: km.Reload, inList: true, run: m.reload},
-		{keys: km.ToggleSel, inList: true, run: func() tea.Cmd { m.toggleCurrentSelection(); return nil }},
-		{keys: km.SelectAll, inList: true, run: func() tea.Cmd { m.selectAllFiltered(); return nil }},
-		{keys: km.ClearSel, inList: true, run: func() tea.Cmd { m.clearSelection(); return nil }},
 		{keys: km.ConnectCmd, inList: true, run: func() tea.Cmd { return m.openCmdPromptFor("Hosts", m.hostsToOpen()) }},
 		{keys: km.Connect, run: m.enter},
 		{keys: km.OneWindow, inList: true, run: func() tea.Cmd {
@@ -156,7 +153,7 @@ func (m *hostsModel) keyActions() []keyAction {
 			m.applyFilter(m.search.Value())
 			return nil
 		}},
-	}
+	}...)
 }
 
 func (m *hostsModel) quit() tea.Cmd {

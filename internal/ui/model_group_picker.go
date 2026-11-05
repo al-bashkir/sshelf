@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -41,26 +40,12 @@ func (d groupPickerDelegate) Render(w io.Writer, m list.Model, index int, item l
 }
 
 type groupPickerModel struct {
-	opts        Options
-	parentCrumb string
+	pickerScreen
 
-	// hosts being added — shown as a summary line in the picker.
-	hosts             []string
-	cachedAddingLines []string // set on resize, reused by View
+	hosts []string // the hosts being added, shown above the search (topLines)
 
-	width  int
-	height int
-
-	all      []groupPickRow
-	names    []string // cached for fuzzy search, parallel to all
-	keymap   keyMap
-	showHelp bool
-	toast    toast
-
-	list       list.Model
-	search     textinput.Model
-	focus      focusState
-	prevSearch string
+	all   []groupPickRow
+	names []string // cached for fuzzy search, parallel to all
 }
 
 func newGroupPickerModel(opts Options) *groupPickerModel {
@@ -79,73 +64,30 @@ func newGroupPickerModel(opts Options) *groupPickerModel {
 	}
 
 	l := list.New(items, groupPickerDelegate{}, 0, 0)
-	configureList(&l)
-
-	search := newSearchInput()
-
-	m := &groupPickerModel{
-		opts:     opts,
-		all:      all,
-		names:    names,
-		keymap:   defaultKeyMap(),
-		showHelp: false,
-		list:     l,
-		search:   search,
-		focus:    focusList,
+	return &groupPickerModel{
+		pickerScreen: newPickerScreen(opts, l),
+		all:          all,
+		names:        names,
 	}
-	return m
 }
 
 func (m *groupPickerModel) Init() tea.Cmd { return nil }
 
 func (m *groupPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		w := msg.Width
-		h := msg.Height
-		m.width = w
-		m.height = h
-		innerW, innerH := frameInnerSize(w, h)
-		m.cachedAddingLines = m.addingLines(innerW)
-		m.list.SetSize(innerW, max(1, innerH-5-len(m.cachedAddingLines)))
-		m.search.Width = max(10, innerW-len(m.search.Prompt))
-		return m, nil
-	case tea.KeyMsg:
-		if m.showHelp {
-			if key.Matches(msg, m.keymap.Help) || msg.String() == "esc" {
-				m.showHelp = false
-				return m, nil
-			}
-			return m, nil
-		}
-
-		if key.Matches(msg, m.keymap.Help) {
-			m.showHelp = !m.showHelp
-			return m, nil
-		}
-		if handleFocusKeys(msg, m.keymap, &m.focus, &m.search) {
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.Esc) {
-			if handlePickerEsc(&m.focus, &m.search, &m.prevSearch, m.applyFilter) {
-				return m, nil
-			}
-			return m, func() tea.Msg { return groupPickerCancelMsg{} }
-		}
-		if key.Matches(msg, m.keymap.Connect) {
-			if m.focus == focusSearch {
-				setFocus(&m.focus, &m.search, focusList)
-				return m, nil
-			}
-			row, ok := m.list.SelectedItem().(groupPickRow)
-			if !ok {
-				return m, nil
-			}
-			return m, func() tea.Msg { return groupPickerDoneMsg{groupIndex: row.index} }
-		}
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		innerW, _ := frameInnerSize(size.Width, size.Height)
+		m.topLines = m.addingLines(innerW)
 	}
+	return m, m.update(msg, pickerHooks{cancel: groupPickerCancelMsg{}, done: m.done, applyFilter: m.applyFilter})
+}
 
-	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
+// done picks the current group; with no group shown it does nothing.
+func (m *groupPickerModel) done() tea.Cmd {
+	row, ok := m.list.SelectedItem().(groupPickRow)
+	if !ok {
+		return nil
+	}
+	return msgCmd(groupPickerDoneMsg{groupIndex: row.index})
 }
 
 // addingLines packs the pending host names into at most 2 lines, each fitting
@@ -241,22 +183,7 @@ func (m *groupPickerModel) addingLines(innerW int) []string {
 }
 
 func (m *groupPickerModel) View() string {
-	if m.showHelp {
-		return renderHelpModal(m.width, m.height, "Select Group", m.helpKeys())
-	}
-	innerW, _ := frameInnerSize(m.width, m.height)
-	sep := dim.Render(strings.Repeat("─", innerW))
-	searchLine := m.search.View()
-	listView := strings.TrimRight(m.list.View(), "\n")
-
-	bodyParts := make([]string, 0, 2)
-	if len(m.cachedAddingLines) > 0 {
-		bodyParts = append(bodyParts, strings.Join(m.cachedAddingLines, "\n"))
-	}
-	bodyParts = append(bodyParts, searchLine+"\n"+sep+"\n"+listView+"\n"+sep)
-	body := strings.TrimRight(strings.Join(bodyParts, "\n"), "\n")
-
-	return renderFocusedFrame(m.width, m.height, breadcrumbTitle(m.parentCrumb, "Select group"), "", body, m.statusLine())
+	return m.view("Select group", "Select Group", m.helpKeys, m.statusLine())
 }
 
 func (m *groupPickerModel) helpKeys() helpMap {
@@ -295,34 +222,23 @@ func (m *groupPickerModel) statusLine() string {
 	return pickerStatusLine(left, &m.list, m.search.Value(), m.toast)
 }
 
+// applyFilter shows every group for an empty query, else the fuzzy
+// matches with their letters marked, and moves to the first row.
 func (m *groupPickerModel) applyFilter(query string) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		items := make([]list.Item, len(m.all))
-		for i, r := range m.all {
-			r.matchedIndexes = nil
-			items[i] = r
+	items := make([]list.Item, 0, len(m.all))
+	if query = strings.TrimSpace(query); query == "" {
+		for _, r := range m.all { // rows in all carry no match marks
+			items = append(items, r)
 		}
-		m.list.SetItems(items)
-		if len(items) > 0 {
-			m.list.Select(0)
+	} else {
+		for _, mt := range fuzzy.Find(query, m.names) {
+			r := m.all[mt.Index]
+			r.matchedIndexes = mt.MatchedIndexes
+			items = append(items, r)
 		}
-		return
-	}
-
-	matches := fuzzy.Find(query, m.names)
-	items := make([]list.Item, len(matches))
-	for i, mt := range matches {
-		r := m.all[mt.Index]
-		r.matchedIndexes = mt.MatchedIndexes
-		items[i] = r
 	}
 	m.list.SetItems(items)
 	if len(items) > 0 {
 		m.list.Select(0)
 	}
-}
-
-func (m *groupPickerModel) refreshAccentStyles() {
-	setSearchBarFocused(&m.search, m.focus == focusSearch)
 }

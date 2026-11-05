@@ -11,6 +11,13 @@ For user-facing behavior and keybindings see [UI spec](../functional/ui.md).
   (`internal/ui/list_screen.go`): the shared list, search, help, command
   prompt and connect state, and the shared `update` (size, keys, toasts).
   Each screen adds its own `overlayKey` and `keyActions` table.
+- Pickers (host picker, group picker) embed `pickerScreen`
+  (`internal/ui/picker_screen.go`): help, Esc (clear search, leave it,
+  cancel), Enter (leave search, else done), the framed view, and lines
+  above the search (`topLines`). Each picker passes `pickerHooks`: its
+  cancel message, done command, filter and any keys of its own.
+- `listScreen` and `pickerScreen` both embed `searchList`
+  (`internal/ui/listutil.go`): the list, search box, focus and size.
 - Form screens (host form, group form, Settings) embed `formScreen`
   (`internal/ui/form_screen.go`): the form, size, toast and the border
   format sub-modal, and the shared `update` (sub-modal, unsaved-changes

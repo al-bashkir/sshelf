@@ -89,7 +89,7 @@ func (m *groupHostsModel) removeKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *groupHostsModel) keyActions() []keyAction {
 	km := m.keymap
-	return []keyAction{
+	return append(m.selectionActions(km), []keyAction{
 		{keys: km.HostsTab, run: func() tea.Cmd { return msgCmd(switchScreenMsg{to: screenHosts}) }},
 		{keys: km.GroupsTab, run: func() tea.Cmd { return msgCmd(switchScreenMsg{to: screenGroups}) }},
 		{keys: km.Settings, run: func() tea.Cmd { return msgCmd(openDefaultsFormMsg{returnTo: screenGroupHosts}) }},
@@ -100,9 +100,6 @@ func (m *groupHostsModel) keyActions() []keyAction {
 		{keys: km.DeleteGroup, inList: true, run: m.askRemove},
 		{keys: km.Esc, run: m.back},
 		{keys: km.Quit, inList: true, run: m.back},
-		{keys: km.ToggleSel, inList: true, run: func() tea.Cmd { m.toggleCurrentSelection(); return nil }},
-		{keys: km.SelectAll, inList: true, run: func() tea.Cmd { m.selectAllFiltered(); return nil }},
-		{keys: km.ClearSel, inList: true, run: func() tea.Cmd { m.clearSelection(); return nil }},
 		{keys: km.ConnectCmd, inList: true, run: func() tea.Cmd {
 			return m.openCmdPromptFor("Groups > "+m.group.Name, m.hostsToOpen())
 		}},
@@ -127,7 +124,7 @@ func (m *groupHostsModel) keyActions() []keyAction {
 		{keys: km.Copy, inList: true, run: func() tea.Cmd {
 			return copyHostConfigCmd(m.opts.Inventory, m.currentHost(), screenGroupHosts, &m.toast)
 		}},
-	}
+	}...)
 }
 
 // back is Esc, or q in the list: blur search, clear the selection, clear

@@ -6,6 +6,7 @@ import (
 
 	"github.com/al-bashkir/sshelf/internal/config"
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sahilm/fuzzy"
 )
@@ -118,6 +119,16 @@ func (s *hostSelectList) selectAllFiltered() {
 		s.selected[h] = true
 	}
 	s.refreshVisibleSelection()
+}
+
+// selectionActions are the select keys in the list: Space toggles the
+// current host, Ctrl+A selects the hosts shown, Ctrl+D clears.
+func (s *hostSelectList) selectionActions(km keyMap) []keyAction {
+	return []keyAction{
+		{keys: km.ToggleSel, inList: true, run: func() tea.Cmd { s.toggleCurrentSelection(); return nil }},
+		{keys: km.SelectAll, inList: true, run: func() tea.Cmd { s.selectAllFiltered(); return nil }},
+		{keys: km.ClearSel, inList: true, run: func() tea.Cmd { s.clearSelection(); return nil }},
+	}
 }
 
 // currentHost returns the focused host, or "" when the list is empty.
