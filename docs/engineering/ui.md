@@ -88,7 +88,12 @@ Notes:
 
 ## Messages and return-to pattern
 
-The router model does not call other models directly; it mostly uses messages:
+The router model does not call other models directly; it mostly uses messages.
+Each message the router handles itself implements `appMsg`: its
+`apply(m *appModel) tea.Cmd` method in `internal/ui/app_routes.go` does the
+work. `appModel.doUpdate()` runs `apply` for those messages and sends every
+other message to the current screen (`appModel.forward()`). When a list
+screen asks to exec ssh or to quit (`exitState`), `forward` ends the program.
 
 - Open messages (start a modal/screen):
   - `openGroupFormMsg`, `openGroupFormPrefillMsg`
@@ -126,7 +131,9 @@ Return-to is explicit:
 ## Window sizing and placement
 
 - Global terminal size is stored in `appModel.width/height`.
-- `appModel.applyWindowSize()` forwards size to all active models.
+- `appModel.screenModels()` is the one table of screen -> model and modal
+  size. `applyWindowSize()` sizes every open model from it, and
+  `sizeOnOpen(screen)` sizes a newly opened one.
 
 Modal sizing helpers:
 
@@ -167,10 +174,11 @@ The router's `View()` is responsible for centering app-level modal screens.
 1) Define a new `screen` constant in `internal/ui/model_app.go`.
 2) Add a new model pointer to `appModel` (if it needs to persist).
 3) Add `open...Msg` + (optional) save/cancel message types.
-4) Handle the message in `appModel.Update()`:
+4) Add the screen to `appModel.screenModels()` with its modal size (nil for
+   the whole window). Sizing and message forwarding then work.
+5) Give each new message an `apply(m *appModel) tea.Cmd` method in
+   `internal/ui/app_routes.go`:
    - construct the model
-   - apply modal sizing (if needed)
-   - set `m.screen`
-5) Update `appModel.applyWindowSize()` to forward sizes.
+   - `m.enter(screen)` (sizes the model and sets `m.screen`)
 6) Update `appModel.View()` to route/center as needed.
 7) Wire a keybinding in the relevant leaf model to emit the `open...Msg`.

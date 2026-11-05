@@ -15,8 +15,9 @@ import (
 )
 
 // routerApp is the app in a 100x30 terminal on the known hosts db and web.
-// web has a host config; group prod holds web and db, group stage is empty
-// and sets user deploy. Saves go to a temp dir; connects never use tmux.
+// web has a host config; group prod holds web and db and sets user ops,
+// group stage is empty and sets user deploy. Saves go to a temp dir;
+// connects never use tmux.
 func routerApp(t *testing.T) *appModel {
 	t.Helper()
 	dir := t.TempDir()
@@ -27,7 +28,7 @@ func routerApp(t *testing.T) *appModel {
 		Inventory: config.Inventory{
 			Hosts: []config.Host{{Host: "web", User: "w"}},
 			Groups: []config.Group{
-				{Name: "prod", Hosts: []string{"web", "db"}},
+				{Name: "prod", User: "ops", Hosts: []string{"web", "db"}},
 				{Name: "stage", User: "deploy"},
 			},
 		},
@@ -183,12 +184,27 @@ func TestRouterGroupForm(t *testing.T) {
 			t.Fatalf("saved groups %+v, want a trimmed qa last", got)
 		}
 	})
+	t.Run("save over an existing group replaces it", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(openGroupFormMsg{index: 0})
+		m.Update(groupFormSaveMsg{index: 0, group: config.Group{Name: "live"}})
+		if got := savedInventory(t, m).Groups; len(got) != 2 || got[0].Name != "live" {
+			t.Fatalf("saved groups %+v, want live in place of prod", got)
+		}
+	})
 	t.Run("a failed save keeps the form open", func(t *testing.T) {
 		m := routerApp(t)
 		m.Update(openGroupFormMsg{index: 1})
 		m.Update(groupFormSaveMsg{index: 1, group: config.Group{Name: "prod"}})
 		wantScreen(t, m, screenGroupForm)
 		wantToast(t, "form", m.form.toast, "group name already exists", toastErr)
+	})
+	t.Run("a form opened out of range cannot save", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(openGroupFormMsg{index: 2})
+		m.Update(groupFormSaveMsg{index: 2, group: config.Group{Name: "qa"}})
+		wantScreen(t, m, screenGroupForm)
+		wantToast(t, "form", m.form.toast, "invalid group name index", toastErr)
 	})
 	t.Run("delete", func(t *testing.T) {
 		m := routerApp(t)
@@ -200,7 +216,7 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("a failed delete shows the error", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(deleteGroupMsg{index: 9})
+		m.Update(deleteGroupMsg{index: 2})
 		wantToast(t, "groups", m.groups.toast, "invalid group index", toastErr)
 	})
 }
@@ -243,7 +259,7 @@ func TestRouterGroupHosts(t *testing.T) {
 	t.Run("a failed remove shows the error", func(t *testing.T) {
 		m := routerApp(t)
 		m.Update(openGroupHostsMsg{index: 0})
-		m.Update(removeHostsMsg{groupIndex: 9, hosts: []string{"web"}})
+		m.Update(removeHostsMsg{groupIndex: 2, hosts: []string{"web"}})
 		wantErrToast(t, "group hosts", m.gh.toast)
 	})
 	t.Run("remove from another screen only saves", func(t *testing.T) {
@@ -284,7 +300,7 @@ func TestRouterHostPicker(t *testing.T) {
 	})
 	t.Run("done adds the hosts and refreshes group hosts", func(t *testing.T) {
 		m := open(t)
-		m.Update(hostPickerDoneMsg{hosts: []string{"db"}})
+		m.Update(hostPickerDoneMsg{hosts: []string{"db", "db"}})
 		wantScreen(t, m, screenGroupHosts)
 		if m.picker != nil {
 			t.Fatal("picker still open")
@@ -308,7 +324,7 @@ func TestRouterHostPicker(t *testing.T) {
 	})
 	t.Run("a failed add keeps the picker open", func(t *testing.T) {
 		m := open(t)
-		m.returnGroupIndex = 9
+		m.returnGroupIndex = 2
 		m.Update(hostPickerDoneMsg{hosts: []string{"db"}})
 		wantScreen(t, m, screenHostPicker)
 		wantToast(t, "picker", m.picker.toast, "invalid group index", toastErr)
@@ -353,7 +369,7 @@ func TestRouterGroupPicker(t *testing.T) {
 	})
 	t.Run("a failed add keeps the picker open", func(t *testing.T) {
 		m := open(t)
-		m.Update(groupPickerDoneMsg{groupIndex: 9})
+		m.Update(groupPickerDoneMsg{groupIndex: 2})
 		wantScreen(t, m, screenGroupPicker)
 		wantToast(t, "group picker", m.gp.toast, "invalid group index", toastErr)
 	})
@@ -512,6 +528,13 @@ func TestRouterCustomHost(t *testing.T) {
 			t.Fatalf("quit=%v exec %q, want ssh to x as deploy", isQuit(cmd), argv)
 		}
 	})
+	t.Run("connect with the first group", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(customHostConnectMsg{returnTo: screenGroups, groupIndex: 0, hosts: []string{"x"}})
+		if argv := strings.Join(m.ExecCmd(), " "); !strings.Contains(argv, "ops") {
+			t.Fatalf("exec %q, want ssh as ops", argv)
+		}
+	})
 	t.Run("connect without a group", func(t *testing.T) {
 		m := routerApp(t)
 		_, cmd := m.Update(customHostConnectMsg{returnTo: screenHosts, groupIndex: -1, hosts: []string{"x"}})
@@ -547,8 +570,8 @@ func TestRouterCustomHost(t *testing.T) {
 	})
 	t.Run("a failed done keeps the custom host open", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openCustomHostMsg{returnTo: screenHosts, groupIndex: 9})
-		m.Update(customHostDoneMsg{returnTo: screenHosts, groupIndex: 9, hosts: []string{"x"}})
+		m.Update(openCustomHostMsg{returnTo: screenHosts, groupIndex: 2})
+		m.Update(customHostDoneMsg{returnTo: screenHosts, groupIndex: 2, hosts: []string{"x"}})
 		wantScreen(t, m, screenCustomHost)
 		wantToast(t, "custom host", m.customHost.toast, "invalid group index", toastErr)
 	})
@@ -638,6 +661,14 @@ func TestRouterToggleHidden(t *testing.T) {
 		}
 		if got := shownHosts(m.hosts); !slices.Equal(got, []string{"web"}) {
 			t.Fatalf("hosts screen shows %v, want [web]", got)
+		}
+	})
+	t.Run("hide a host with a config marks the config", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(toggleHiddenHostMsg{host: "web", hide: true})
+		inv := savedInventory(t, m)
+		if len(inv.HiddenHosts) != 0 || len(inv.Hosts) != 1 || !inv.Hosts[0].Hidden {
+			t.Fatalf("saved hidden hosts %v, hosts %+v, want web hidden in its config", inv.HiddenHosts, inv.Hosts)
 		}
 	})
 	t.Run("a failed save shows the error", func(t *testing.T) {
