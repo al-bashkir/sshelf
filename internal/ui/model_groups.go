@@ -131,170 +131,143 @@ func (m *groupsModel) Init() tea.Cmd { return nil }
 func (m *groupsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		w := msg.Width
-		h := msg.Height
-		m.width = w
-		m.height = h
-		m.list.SetSize(max(0, w-2), tabBoxListContentHeight(w, h)) // View sizes the search box
+		m.width, m.height = msg.Width, msg.Height
+		m.list.SetSize(max(0, m.width-2), tabBoxListContentHeight(m.width, m.height)) // View sizes the search box
 		return m, nil
 	case tea.KeyMsg:
-		if m.showHelp {
-			if key.Matches(msg, m.keymap.Help) || msg.String() == "esc" {
-				m.showHelp = false
-				return m, nil
-			}
-			updateHelpViewport(&m.helpVP, msg)
-			return m, nil
-		}
-
-		if m.cmdPrompt {
-			run := func(cmd string) tea.Cmd { return m.connectAllCmd(false, cmd) }
-			return m, handleCmdPromptKey(msg, &m.cmdPrompt, &m.cmdInput, &m.toast, run)
-		}
-
-		if handled, cmd := handleConfirmQuit(msg, &m.confirmQuit, &m.toast, &m.quitting, true); handled {
+		if cmd, ok := routeListKey(msg, m.overlayKey, m.keymap, &m.focus, &m.search, m.keyActions); ok {
 			return m, cmd
-		}
-		if m.confirmDelete {
-			s := msg.String()
-			switch s {
-			case "y", "Y", "enter":
-				idx := m.deleteIndex
-				m.confirmDelete = false
-				return m, func() tea.Msg { return deleteGroupMsg{index: idx} }
-			case "n", "N", "esc":
-				m.confirmDelete = false
-				m.toast = toast{}
-				return m, nil
-			default:
-				return m, nil
-			}
-		}
-		if handled, cmd := handleConfirmConnect(msg, &m.confirmConnect, &m.pendingConnectFn, &m.toast); handled {
-			return m, cmd
-		}
-
-		if m.focus == focusList {
-			if handleVimListNav(msg, &m.list, &m.navPendingG) {
-				return m, nil
-			}
-		} else {
-			m.navPendingG = false
-		}
-
-		if key.Matches(msg, m.keymap.HostsTab) {
-			return m, func() tea.Msg { return switchScreenMsg{to: screenHosts} }
-		}
-		if key.Matches(msg, m.keymap.Settings) {
-			return m, func() tea.Msg { return openDefaultsFormMsg{returnTo: screenGroups} }
-		}
-
-		if key.Matches(msg, m.keymap.Quit) && m.focus != focusSearch {
-			if !m.opts.Config.Defaults.ConfirmQuit {
-				m.quitting = true
-				return m, tea.Quit
-			}
-			m.confirmQuit = true
-			m.toast = toast{text: "quit? (y/n)", level: toastWarn}
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.Help) {
-			m.showHelp = !m.showHelp
-			if m.showHelp && m.width > 0 && m.height > 0 {
-				m.helpVP = initHelpViewport(m.width, m.height, "Groups", m.helpKeys())
-			}
-			return m, nil
-		}
-		if handleFocusKeys(msg, m.keymap, &m.focus, &m.search) {
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.Esc) {
-			handleEscChain(&m.focus, &m.search, &m.prevSearch, 0, nil, m.applyFilter)
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.NewGroup) && m.focus == focusList {
-			return m, func() tea.Msg { return openGroupFormMsg{index: -1} }
-		}
-		if key.Matches(msg, m.keymap.EditGroup) && m.focus == focusList {
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok {
-				return m, nil
-			}
-			return m, func() tea.Msg { return openGroupFormMsg{index: row.index} }
-		}
-		if key.Matches(msg, m.keymap.AddHosts) && m.focus == focusList {
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok {
-				return m, nil
-			}
-			return m, func() tea.Msg { return openHostPickerMsg{groupIndex: row.index, returnTo: screenGroups} }
-		}
-		if key.Matches(msg, m.keymap.CustomHost) && m.focus == focusList {
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok {
-				return m, nil
-			}
-			return m, func() tea.Msg { return openCustomHostMsg{returnTo: screenGroups, groupIndex: row.index} }
-		}
-		if key.Matches(msg, m.keymap.DeleteGroup) && m.focus == focusList {
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok {
-				return m, nil
-			}
-			m.confirmDelete = true
-			m.deleteIndex = row.index
-			m.toast = toast{text: "delete? (y/n)", level: toastWarn}
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.Connect) {
-			if m.focus == focusSearch {
-				acceptSearch(&m.focus, &m.search, &m.prevSearch, len(m.list.Items()), m.applyFilter)
-				return m, nil
-			}
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok {
-				return m, nil
-			}
-			return m, func() tea.Msg { return openGroupHostsMsg{index: row.index} }
-		}
-		if key.Matches(msg, m.keymap.ConnectCmd) && m.focus == focusList {
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok {
-				return m, nil
-			}
-			m.cmdPromptCrumb = "Groups > " + row.name
-			m.cmdInput = newCmdPromptInput(m.width, m.height)
-			m.cmdPrompt = true
-			return m, nil
-		}
-		if key.Matches(msg, m.keymap.ConnectAll) && m.focus == focusList {
-			m.toast = toast{}
-			return m, m.connectAllCmd(false, "")
-		}
-		if key.Matches(msg, m.keymap.Copy) && m.focus == focusList {
-			row, ok := m.list.SelectedItem().(groupRow)
-			if !ok || row.index < 0 || row.index >= len(m.opts.Inventory.Groups) {
-				m.toast = toast{text: "no group selected", level: toastWarn}
-				return m, nil
-			}
-			g := m.opts.Inventory.Groups[row.index]
-			g.Name = suggestCopyGroupName(m.opts.Inventory, g.Name)
-			return m, func() tea.Msg { return openGroupFormPrefillMsg{group: g} }
-		}
-		if key.Matches(msg, m.keymap.OneWindow) && m.focus == focusList {
-			m.toast = toast{}
-			return m, m.connectAllCmd(true, "")
 		}
 	case toastMsg:
-		m.toast = toast(msg)
-		if m.opts.Popup && msg.level != toastErr {
-			m.quitting = true
-			return m, tea.Quit
-		}
-		return m, nil
+		return m, m.showToast(toast(msg), m.opts.Popup)
 	}
-
 	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
+}
+
+// overlayKey handles keys while help, the command prompt or a question
+// shows, and vim g/gg/G in the list.
+func (m *groupsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch {
+	case m.showHelp:
+		helpViewKey(msg, m.keymap.Help, &m.showHelp, &m.helpVP)
+		return nil, true
+	case m.cmdPrompt:
+		run := func(cmd string) tea.Cmd { return m.connectAllCmd(false, cmd) }
+		return handleCmdPromptKey(msg, &m.cmdPrompt, &m.cmdInput, &m.toast, run), true
+	}
+	if handled, cmd := handleConfirmQuit(msg, &m.confirmQuit, &m.toast, &m.quitting, true); handled {
+		return cmd, true
+	}
+	if m.confirmDelete {
+		return m.deleteKey(msg), true
+	}
+	if handled, cmd := handleConfirmConnect(msg, &m.confirmConnect, &m.pendingConnectFn, &m.toast); handled {
+		return cmd, true
+	}
+	return nil, m.focus == focusList && handleVimListNav(msg, &m.list, &m.navPendingG)
+}
+
+// deleteKey answers the delete question: y deletes, n cancels, and any
+// other key leaves the question open.
+func (m *groupsModel) deleteKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "y", "Y", "enter":
+		m.confirmDelete = false
+		return msgCmd(deleteGroupMsg{index: m.deleteIndex})
+	case "n", "N", "esc":
+		m.confirmDelete = false
+		m.toast = toast{}
+	}
+	return nil
+}
+
+func (m *groupsModel) keyActions() []keyAction {
+	km := m.keymap
+	return []keyAction{
+		{keys: km.HostsTab, run: func() tea.Cmd { return msgCmd(switchScreenMsg{to: screenHosts}) }},
+		{keys: km.Settings, run: func() tea.Cmd { return msgCmd(openDefaultsFormMsg{returnTo: screenGroups}) }},
+		{keys: km.Quit, inList: true, run: func() tea.Cmd {
+			return askQuit(m.opts.Config.Defaults.ConfirmQuit, &m.confirmQuit, &m.toast, &m.quitting)
+		}},
+		{keys: km.Help, run: func() tea.Cmd {
+			toggleHelpView(&m.showHelp, &m.helpVP, m.width, m.height, "Groups", m.helpKeys)
+			return nil
+		}},
+		{keys: km.Esc, run: func() tea.Cmd {
+			handleEscChain(&m.focus, &m.search, &m.prevSearch, 0, nil, m.applyFilter)
+			return nil
+		}},
+		{keys: km.NewGroup, inList: true, run: func() tea.Cmd { return msgCmd(openGroupFormMsg{index: -1}) }},
+		{keys: km.EditGroup, inList: true, run: m.onRow(func(r groupRow) tea.Cmd {
+			return msgCmd(openGroupFormMsg{index: r.index})
+		})},
+		{keys: km.AddHosts, inList: true, run: m.onRow(func(r groupRow) tea.Cmd {
+			return msgCmd(openHostPickerMsg{groupIndex: r.index, returnTo: screenGroups})
+		})},
+		{keys: km.CustomHost, inList: true, run: m.onRow(func(r groupRow) tea.Cmd {
+			return msgCmd(openCustomHostMsg{returnTo: screenGroups, groupIndex: r.index})
+		})},
+		{keys: km.DeleteGroup, inList: true, run: m.onRow(m.askDelete)},
+		{keys: km.Connect, run: m.enter},
+		{keys: km.ConnectCmd, inList: true, run: m.onRow(m.openCmdPrompt)},
+		{keys: km.ConnectAll, inList: true, run: func() tea.Cmd {
+			m.toast = toast{}
+			return m.connectAllCmd(false, "")
+		}},
+		{keys: km.Copy, inList: true, run: m.copyGroup},
+		{keys: km.OneWindow, inList: true, run: func() tea.Cmd {
+			m.toast = toast{}
+			return m.connectAllCmd(true, "")
+		}},
+	}
+}
+
+// onRow returns an action that runs f on the selected group; with no
+// group selected it does nothing.
+func (m *groupsModel) onRow(f func(groupRow) tea.Cmd) func() tea.Cmd {
+	return func() tea.Cmd {
+		row, ok := m.list.SelectedItem().(groupRow)
+		if !ok {
+			return nil
+		}
+		return f(row)
+	}
+}
+
+// enter accepts the query in the search box, or opens the group from the
+// list.
+func (m *groupsModel) enter() tea.Cmd {
+	if m.focus == focusSearch {
+		acceptSearch(&m.focus, &m.search, &m.prevSearch, len(m.list.Items()), m.applyFilter)
+		return nil
+	}
+	return m.onRow(func(r groupRow) tea.Cmd { return msgCmd(openGroupHostsMsg{index: r.index}) })()
+}
+
+func (m *groupsModel) askDelete(r groupRow) tea.Cmd {
+	m.confirmDelete = true
+	m.deleteIndex = r.index
+	m.toast = toast{text: "delete? (y/n)", level: toastWarn}
+	return nil
+}
+
+func (m *groupsModel) openCmdPrompt(r groupRow) tea.Cmd {
+	m.cmdPromptCrumb = "Groups > " + r.name
+	m.cmdInput = newCmdPromptInput(m.width, m.height)
+	m.cmdPrompt = true
+	return nil
+}
+
+// copyGroup opens a new-group form filled from the selected group.
+func (m *groupsModel) copyGroup() tea.Cmd {
+	row, ok := m.list.SelectedItem().(groupRow)
+	if !ok || row.index >= len(m.opts.Inventory.Groups) {
+		m.toast = toast{text: "no group selected", level: toastWarn}
+		return nil
+	}
+	g := m.opts.Inventory.Groups[row.index]
+	g.Name = suggestCopyGroupName(m.opts.Inventory, g.Name)
+	return msgCmd(openGroupFormPrefillMsg{group: g})
 }
 
 func (m *groupsModel) View() string {
@@ -452,7 +425,7 @@ func (m *groupsModel) connectAllCmd(oneWindow bool, remoteCmd string) tea.Cmd {
 		m.toast = toast{text: "no group selected", level: toastWarn}
 		return nil
 	}
-	if row.index < 0 || row.index >= len(m.opts.Inventory.Groups) {
+	if row.index >= len(m.opts.Inventory.Groups) { // rows index the inventory, so only a stale row fails
 		m.toast = toast{text: "invalid group", level: toastErr}
 		return nil
 	}

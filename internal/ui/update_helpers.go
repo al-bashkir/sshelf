@@ -284,3 +284,28 @@ func updateSearchOrList(
 	*l, cmd = l.Update(msg)
 	return cmd
 }
+
+// routeListKey gives a list screen's key to its overlay first, then to the
+// focus keys, then to its actions. ok is false when the search box or the
+// list should get the key.
+func routeListKey(msg tea.KeyMsg, overlay func(tea.KeyMsg) (tea.Cmd, bool), km keyMap,
+	focus *focusState, search *textinput.Model, actions func() []keyAction) (tea.Cmd, bool) {
+	if cmd, ok := overlay(msg); ok {
+		return cmd, true
+	}
+	if handleFocusKeys(msg, km, focus, search) {
+		return nil, true
+	}
+	return runKeyAction(msg, *focus, actions())
+}
+
+// askQuit quits, or first asks when confirm is on.
+func askQuit(confirm bool, confirmQuit *bool, t *toast, quitting *bool) tea.Cmd {
+	if !confirm {
+		*quitting = true
+		return tea.Quit
+	}
+	*confirmQuit = true
+	*t = toast{text: "quit? (y/n)", level: toastWarn}
+	return nil
+}

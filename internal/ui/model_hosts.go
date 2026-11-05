@@ -122,7 +122,7 @@ func (m *hostsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	case toastMsg:
-		return m, m.showToast(toast(msg))
+		return m, m.showToast(toast(msg), m.opts.Popup)
 	}
 	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
 }
@@ -141,27 +141,8 @@ func (m *hostsModel) reloaded(msg knownHostsReloadMsg) {
 	m.toast = toast{text: fmt.Sprintf("%d hosts loaded", len(m.allHosts)), level: toastInfo}
 }
 
-// showToast shows the result of a finished command. In popup mode anything
-// but an error ends sshelf.
-func (m *hostsModel) showToast(t toast) tea.Cmd {
-	m.toast = t
-	if m.opts.Popup && t.level != toastErr {
-		m.quitting = true
-		return tea.Quit
-	}
-	return nil
-}
-
-// handleKey gives a key to the open overlay first, then to the focus keys,
-// then to the screen actions. ok is false when search or list should get it.
 func (m *hostsModel) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if cmd, ok := m.overlayKey(msg); ok {
-		return cmd, true
-	}
-	if handleFocusKeys(msg, m.keymap, &m.focus, &m.search) {
-		return nil, true
-	}
-	return runKeyAction(msg, m.focus, m.keyActions())
+	return routeListKey(msg, m.overlayKey, m.keymap, &m.focus, &m.search, m.keyActions)
 }
 
 // overlayKey handles keys while help, the command prompt or a confirm
@@ -169,7 +150,7 @@ func (m *hostsModel) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func (m *hostsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch {
 	case m.showHelp:
-		m.helpKey(msg)
+		helpViewKey(msg, m.keymap.Help, &m.showHelp, &m.helpVP)
 		return nil, true
 	case m.cmdPrompt:
 		return handleCmdPromptKey(msg, &m.cmdPrompt, &m.cmdInput, &m.toast, m.handleConnectWithRemoteCommand), true
@@ -181,14 +162,6 @@ func (m *hostsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return cmd, true
 	}
 	return nil, m.focus == focusList && handleVimListNav(msg, &m.list, &m.navPendingG)
-}
-
-func (m *hostsModel) helpKey(msg tea.KeyMsg) {
-	if key.Matches(msg, m.keymap.Help) || msg.String() == "esc" {
-		m.showHelp = false
-		return
-	}
-	updateHelpViewport(&m.helpVP, msg)
 }
 
 func (m *hostsModel) keyActions() []keyAction {
@@ -235,20 +208,11 @@ func (m *hostsModel) keyActions() []keyAction {
 }
 
 func (m *hostsModel) quit() tea.Cmd {
-	if !m.opts.Config.Defaults.ConfirmQuit {
-		m.quitting = true
-		return tea.Quit
-	}
-	m.confirmQuit = true
-	m.toast = toast{text: "quit? (y/n)", level: toastWarn}
-	return nil
+	return askQuit(m.opts.Config.Defaults.ConfirmQuit, &m.confirmQuit, &m.toast, &m.quitting)
 }
 
 func (m *hostsModel) toggleHelp() tea.Cmd {
-	m.showHelp = !m.showHelp
-	if m.showHelp && m.width > 0 && m.height > 0 {
-		m.helpVP = initHelpViewport(m.width, m.height, "Hosts", m.helpKeys())
-	}
+	toggleHelpView(&m.showHelp, &m.helpVP, m.width, m.height, "Hosts", m.helpKeys)
 	return nil
 }
 

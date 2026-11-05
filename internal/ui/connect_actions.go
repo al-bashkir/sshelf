@@ -103,3 +103,14 @@ func remoteCmdModifier(cmd string) func(*sshcmd.Settings) {
 		s.RemoteCommand = keepSessionOpenRemoteCmd(cmd)
 	}
 }
+
+// showToast shows the result of a finished command. In popup mode anything
+// but an error ends sshelf.
+func (c *connectActions) showToast(t toast, popup bool) tea.Cmd {
+	c.toast = t
+	if popup && t.level != toastErr {
+		c.quitting = true
+		return tea.Quit
+	}
+	return nil
+}

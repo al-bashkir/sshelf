@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -136,4 +137,23 @@ func renderHelpModalWithVP(width, height int, title string, keys helpMap, vp *vi
 	content := helpContent(title, keys)
 	box := helpBoxStyle.Width(boxW).Render(content)
 	return withThemeBG(lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box))
+}
+
+// toggleHelpView opens or closes a screen's help overlay. Help is laid out
+// only once the window size is known.
+func toggleHelpView(show *bool, vp *viewport.Model, w, h int, title string, keys func() helpMap) {
+	*show = !*show
+	if *show && w > 0 && h > 0 {
+		*vp = initHelpViewport(w, h, title, keys())
+	}
+}
+
+// helpViewKey handles a key while help shows: the help key or Esc closes
+// it, any other key scrolls it.
+func helpViewKey(msg tea.KeyMsg, helpKey key.Binding, show *bool, vp *viewport.Model) {
+	if key.Matches(msg, helpKey) || msg.String() == "esc" {
+		*show = false
+		return
+	}
+	updateHelpViewport(vp, msg)
 }

@@ -288,3 +288,12 @@ func TestGroupsLayout(t *testing.T) {
 		t.Fatalf("view is %d lines, want 30", len(lines))
 	}
 }
+
+func TestGroupsCopyStaleRow(t *testing.T) {
+	m := groupsScreen(nil)
+	m.opts.Inventory.Groups = m.opts.Inventory.Groups[:1] // db's row now points past the end
+	if cmd := on(m, "y"); cmd != nil {
+		t.Fatal("copy of a stale row opened a form")
+	}
+	wantToast(t, "groups", m.toast, "no group selected", toastWarn)
+}
