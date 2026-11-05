@@ -1,10 +1,14 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // listScreen is what the Hosts, Groups and Group hosts screens share: a
@@ -69,7 +73,53 @@ func (s *listScreen) openCmdPromptFor(prefix string, targets []string) tea.Cmd {
 }
 
 // emptyView fills the list area when no row shows: a no-match note while
-// a search is typed, else hint.
-func (s *listScreen) emptyView(hint string) string {
-	return renderListEmptyState(s.width, s.height, s.search.Value(), hint)
+// a search is typed, else the hint lines, dimmed.
+func (s *listScreen) emptyView(hint ...string) string {
+	for i, h := range hint {
+		hint[i] = dim.Render(h)
+	}
+	return renderListEmptyState(s.width, s.height, s.search.Value(), strings.Join(hint, "\n"))
+}
+
+// overlayView draws help, the command prompt or the connect question when
+// one shows; cmdHint is the prompt's help line.
+func (s *listScreen) overlayView(helpTitle string, help func() helpMap, cmdHint string) (string, bool) {
+	switch {
+	case s.showHelp:
+		return renderHelpModalWithVP(s.width, s.height, helpTitle, help(), &s.helpVP), true
+	case s.cmdPrompt:
+		return renderCmdPromptModal(s.width, s.height, s.cmdPromptCrumb, cmdHint, s.cmdInput), true
+	case s.confirmConnect:
+		box := connectConfirmBox(max(0, s.width-4), s.confirmConnectCount, s.confirmConnectHosts)
+		return lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, box), true
+	}
+	return "", false
+}
+
+// hintFooter is the compact hint line in a narrow window, else the wide
+// line and, in a tall enough window, the second line.
+func (s *listScreen) hintFooter(compact, wide, second string) string {
+	switch {
+	case s.width < compactWidthThreshold:
+		return styledFooter(compact)
+	case s.height < twoLineFooterMinHeight:
+		return styledFooter(wide)
+	}
+	return styledFooter(wide + "\n" + second)
+}
+
+// listOrEmpty is the list, or empty() when no row shows.
+func (s *listScreen) listOrEmpty(empty func() string) string {
+	if len(s.list.Items()) == 0 {
+		return empty()
+	}
+	return s.list.View()
+}
+
+// hostCount is " N hosts", or " shown / N hosts" while a search is typed.
+func (s *listScreen) hostCount(total int) string {
+	if strings.TrimSpace(s.search.Value()) != "" {
+		return dim.Render(fmt.Sprintf(" %d / %d hosts", len(s.list.Items()), total))
+	}
+	return dim.Render(fmt.Sprintf(" %d hosts", total))
 }

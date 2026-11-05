@@ -2,88 +2,67 @@ package ui
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *hostsModel) View() string {
-	if m.showHelp {
-		return renderHelpModalWithVP(m.width, m.height, "Hosts", m.helpKeys(), &m.helpVP)
-	}
-	if m.cmdPrompt {
-		return renderCmdPromptModal(m.width, m.height, m.cmdPromptCrumb,
-			"Connect and run a remote command (keeps session open).", m.cmdInput)
+	if v, ok := m.overlayView("Hosts", m.helpKeys, "Connect and run a remote command (keeps session open)."); ok {
+		return v
 	}
 	if m.confirmQuit {
 		return renderQuitConfirm(m.width, m.height)
 	}
-	if m.confirmConnect {
-		modal := connectConfirmBox(max(0, m.width-4), m.confirmConnectCount, m.confirmConnectHosts)
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
-	}
+	right := m.status()
+	return renderMainTabBoxWithFooter(m.width, m.height, 0, searchHeader(&m.search, m.width, right), right,
+		m.listOrEmpty(m.emptyStateView), m.footerHints())
+}
 
+// status is the header's right side: a toast, the reload spinner, or the
+// load state, the selection and the host counts.
+func (m *hostsModel) status() string {
+	switch {
+	case !m.toast.empty():
+		return renderToastWithSpinner(m.toast, spinnerActive)
+	case spinnerActive:
+		return statusWarn.Render(spinnerFrame())
+	}
 	hasWarn := m.opts.SkippedLines > 0 || len(m.opts.LoadErrors) > 0
-	right := ""
-	if !m.toast.empty() {
-		right = renderToastWithSpinner(m.toast, spinnerActive)
-	} else if spinnerActive {
-		right = statusWarn.Render(spinnerFrame())
-	} else {
-		right = statusDot(true, hasWarn)
-		if hasWarn {
-			right += dim.Render(" load warnings")
-		}
-		if selCount := len(m.selected); selCount > 0 {
-			right += "  " + badgeSelStyle.Render(fmt.Sprintf("%d selected", selCount))
-		}
-		hc := m.hiddenCount()
-		total := len(m.allHosts)
-		if !m.showHidden {
-			total -= hc
-		}
-		shown := len(m.list.Items())
-		q := strings.TrimSpace(m.search.Value())
-		if q != "" {
-			right += dim.Render(fmt.Sprintf(" %d / %d hosts", shown, total))
-		} else {
-			right += dim.Render(fmt.Sprintf(" %d hosts", total))
-		}
-		if hc > 0 {
-			if m.showHidden {
-				right += "  " + headerStyle.Render(fmt.Sprintf("%d showed", hc))
-			} else {
-				right += "  " + dim.Render(fmt.Sprintf("%d hidden", hc))
-			}
-		}
+	right := statusDot(true, hasWarn)
+	if hasWarn {
+		right += dim.Render(" load warnings")
 	}
-	var footer string
-	hasSel := len(m.selected) > 0
-	if m.width < compactWidthThreshold {
-		if hasSel {
-			footer = styledFooter("\u21b5 connect  o panes  \u2423 clear  ? help")
-		} else {
-			footer = styledFooter("\u21b5 connect  \u2423 select  ? help")
-		}
-	} else {
-		if hasSel {
-			footer = styledFooter("\u21b5 connect  o panes  ·  Ctrl+o cmd  a add-to-group  ·  \u2423 clear")
-			if m.height >= twoLineFooterMinHeight {
-				footer += "\n" + styledFooter("e config  r reload  ·  Alt+2 groups  Alt+3 settings  ? help")
-			}
-		} else {
-			footer = styledFooter("\u21b5 connect  O pane  ·  \u2423 select  o panes  ·  c custom  Alt+2 groups  Ctrl+H hide")
-			if m.height >= twoLineFooterMinHeight {
-				footer += "\n" + styledFooter("e config  Ctrl+o cmd  a add  r reload  ·  tab search  H show hidden  ? help")
-			}
-		}
+	if n := len(m.selected); n > 0 {
+		right += "  " + badgeSelStyle.Render(fmt.Sprintf("%d selected", n))
 	}
+	total := len(m.allHosts)
+	if !m.showHidden {
+		total -= m.hiddenCount()
+	}
+	return right + m.hostCount(total) + m.hiddenNote()
+}
 
-	listContent := m.list.View()
-	if len(m.list.Items()) == 0 {
-		listContent = m.emptyStateView()
+// hiddenNote counts the hidden hosts: "N hidden", or "N showed" while
+// they show.
+func (m *hostsModel) hiddenNote() string {
+	n := m.hiddenCount()
+	switch {
+	case n == 0:
+		return ""
+	case m.showHidden:
+		return "  " + headerStyle.Render(fmt.Sprintf("%d showed", n))
 	}
-	return renderMainTabBoxWithFooter(m.width, m.height, 0, searchHeader(&m.search, m.width, right), right, listContent, footer)
+	return "  " + dim.Render(fmt.Sprintf("%d hidden", n))
+}
+
+// footerHints offers the selection keys while hosts are selected.
+func (m *hostsModel) footerHints() string {
+	if len(m.selected) > 0 {
+		return m.hintFooter("\u21b5 connect  o panes  \u2423 clear  ? help",
+			"\u21b5 connect  o panes  ·  Ctrl+o cmd  a add-to-group  ·  \u2423 clear",
+			"e config  r reload  ·  Alt+2 groups  Alt+3 settings  ? help")
+	}
+	return m.hintFooter("\u21b5 connect  \u2423 select  ? help",
+		"\u21b5 connect  O pane  ·  \u2423 select  o panes  ·  c custom  Alt+2 groups  Ctrl+H hide",
+		"e config  Ctrl+o cmd  a add  r reload  ·  tab search  H show hidden  ? help")
 }
 
 func (m *hostsModel) emptyStateView() string {

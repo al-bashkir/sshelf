@@ -157,61 +157,40 @@ func (m *groupHostsModel) enter() tea.Cmd {
 }
 
 func (m *groupHostsModel) View() string {
-	if m.showHelp {
-		return renderHelpModalWithVP(m.width, m.height, "Group Hosts", m.helpKeys(), &m.helpVP)
+	if v, ok := m.overlayView("Group Hosts", m.helpKeys, "Connect and run a remote command (keeps session open)."); ok {
+		return v
 	}
-	if m.cmdPrompt {
-		return renderCmdPromptModal(m.width, m.height, m.cmdPromptCrumb,
-			"Connect and run a remote command (keeps session open).", m.cmdInput)
-	}
-	if m.confirmConnect {
-		modal := connectConfirmBox(max(0, m.width-4), m.confirmConnectCount, m.confirmConnectHosts)
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
-	}
+	crumb := dim.Render("Groups >") + " " + headerStyle.Render(m.group.Name)
 	if m.confirmRemove {
-		innerW := max(0, m.width-2)
-		innerH := max(0, m.height-2)
-		contentH := max(0, innerH-6)
-		modal := removeHostsConfirmBox(innerW, m.removeList, m.group.Name)
-		placed := lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, modal)
-		breadcrumb := dim.Render("Groups >") + " " + headerStyle.Render(m.group.Name)
-		right := statusDot(true, false)
-		return renderBreadcrumbTabBox(m.width, m.height, breadcrumb, searchHeader(&m.search, m.width, right), right, placed, "")
+		dot := statusDot(true, false)
+		return renderBreadcrumbTabBox(m.width, m.height, crumb, searchHeader(&m.search, m.width, dot), dot, m.removeView(), "")
 	}
+	right := m.status()
+	footer := m.hintFooter("\u21b5 connect  \u2423 select  esc back  ? help",
+		"\u21b5 connect  O pane  ·  \u2423 select  o panes  ·  Ctrl+o cmd  a add",
+		"e config  c custom  d remove  y copy  ·  Alt+1 hosts  Alt+3 settings  esc back  ? help")
+	return renderBreadcrumbTabBox(m.width, m.height, crumb, searchHeader(&m.search, m.width, right), right,
+		m.listOrEmpty(func() string { return m.emptyView("No hosts in this group.", "a \u2014 add hosts") }), footer)
+}
 
-	right := ""
+// status is the header's right side: a toast, or the host counts and the
+// selection.
+func (m *groupHostsModel) status() string {
 	if !m.toast.empty() {
-		right = renderToast(m.toast)
-	} else {
-		right = statusDot(true, false)
-		shown := len(m.list.Items())
-		total := len(m.allHosts)
-		q := strings.TrimSpace(m.search.Value())
-		if q != "" {
-			right += dim.Render(fmt.Sprintf(" %d / %d hosts", shown, total))
-		} else {
-			right += dim.Render(fmt.Sprintf(" %d hosts", total))
-		}
-		if selCount := len(m.selected); selCount > 0 {
-			right += "   " + badgeSelStyle.Render(fmt.Sprintf("%d selected", selCount))
-		}
+		return renderToast(m.toast)
 	}
-	var footer string
-	if m.width < compactWidthThreshold {
-		footer = styledFooter("\u21b5 connect  \u2423 select  esc back  ? help")
-	} else {
-		footer = styledFooter("\u21b5 connect  O pane  ·  \u2423 select  o panes  ·  Ctrl+o cmd  a add")
-		if m.height >= twoLineFooterMinHeight {
-			footer += "\n" + styledFooter("e config  c custom  d remove  y copy  ·  Alt+1 hosts  Alt+3 settings  esc back  ? help")
-		}
+	right := statusDot(true, false) + m.hostCount(len(m.allHosts))
+	if n := len(m.selected); n > 0 {
+		right += "   " + badgeSelStyle.Render(fmt.Sprintf("%d selected", n))
 	}
+	return right
+}
 
-	listContent := m.list.View()
-	if len(m.list.Items()) == 0 {
-		listContent = m.emptyStateView()
-	}
-	breadcrumb := dim.Render("Groups >") + " " + headerStyle.Render(m.group.Name)
-	return renderBreadcrumbTabBox(m.width, m.height, breadcrumb, searchHeader(&m.search, m.width, right), right, listContent, footer)
+// removeView centers the remove question in the list area.
+func (m *groupHostsModel) removeView() string {
+	innerW := max(0, m.width-2)
+	contentH := max(0, max(0, m.height-2)-6)
+	return lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, removeHostsConfirmBox(innerW, m.removeList, m.group.Name))
 }
 
 func (m *groupHostsModel) helpKeys() helpMap {
@@ -263,11 +242,6 @@ func (m *groupHostsModel) helpKeys() helpMap {
 			}},
 		},
 	}
-}
-
-func (m *groupHostsModel) emptyStateView() string {
-	return m.emptyView(
-		dim.Render("No hosts in this group.") + "\n" + dim.Render("a \u2014 add hosts"))
 }
 
 func (m *groupHostsModel) applyFilter(query string) {

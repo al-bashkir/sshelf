@@ -10,7 +10,9 @@ For user-facing behavior and keybindings see [UI spec](../functional/ui.md).
 - List screens (Hosts, Groups, Group hosts) embed `listScreen`
   (`internal/ui/list_screen.go`): the shared list, search, help, command
   prompt and connect state, and the shared `update` (size, keys, toasts).
-  Each screen adds its own `overlayKey` and `keyActions` table.
+  Each screen adds its own `overlayKey` and `keyActions` table. Views
+  share `overlayView` (help, command prompt, connect question),
+  `hintFooter`, `listOrEmpty` and `hostCount`.
 - Pickers (host picker, group picker) embed `pickerScreen`
   (`internal/ui/picker_screen.go`): help, Esc (clear search, leave it,
   cancel), Enter (leave search, else done), the framed view, and lines

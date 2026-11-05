@@ -224,57 +224,37 @@ func (m *groupsModel) copyGroup() tea.Cmd {
 }
 
 func (m *groupsModel) View() string {
-	if m.showHelp {
-		return renderHelpModalWithVP(m.width, m.height, "Groups", m.helpKeys(), &m.helpVP)
-	}
-	if m.cmdPrompt {
-		return renderCmdPromptModal(m.width, m.height, m.cmdPromptCrumb,
-			"Connect and run a remote command for all hosts (keeps sessions open).", m.cmdInput)
+	if v, ok := m.overlayView("Groups", m.helpKeys, "Connect and run a remote command for all hosts (keeps sessions open)."); ok {
+		return v
 	}
 	if m.confirmQuit {
 		return renderQuitConfirm(m.width, m.height)
 	}
-	if m.confirmConnect {
-		modal := connectConfirmBox(max(0, m.width-4), m.confirmConnectCount, m.confirmConnectHosts)
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
-	}
+	count := statusDot(true, false) + "   " + dim.Render(fmt.Sprintf("%d groups", len(m.allRows)))
 	if m.confirmDelete {
-		name := ""
-		hostCount := 0
-		if m.deleteIndex >= 0 && m.deleteIndex < len(m.opts.Inventory.Groups) {
-			name = m.opts.Inventory.Groups[m.deleteIndex].Name
-			hostCount = len(m.opts.Inventory.Groups[m.deleteIndex].Hosts)
-		}
-		innerW := max(0, m.width-2)
-		innerH := max(0, m.height-2)
-		contentH := max(0, innerH-4)
-		modal := deleteGroupConfirmBox(innerW, name, hostCount)
-		placed := lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, modal)
-		right := statusDot(true, false) + "   " + dim.Render(fmt.Sprintf("%d groups", len(m.allRows)))
-		return renderMainTabBox(m.width, m.height, 1, searchHeader(&m.search, m.width, right), right, placed)
+		return renderMainTabBox(m.width, m.height, 1, searchHeader(&m.search, m.width, count), count, m.deleteView())
 	}
-
-	right := ""
+	right := count
 	if !m.toast.empty() {
 		right = renderToast(m.toast)
-	} else {
-		right = statusDot(true, false) + "   " + dim.Render(fmt.Sprintf("%d groups", len(m.allRows)))
 	}
-	var footer string
-	if m.width < compactWidthThreshold {
-		footer = styledFooter("\u21b5 open  C connect  ? help")
-	} else {
-		footer = styledFooter("\u21b5 open  C connect  ·  o panes  Ctrl+o cmd  ·  n new")
-		if m.height >= twoLineFooterMinHeight {
-			footer += "\n" + styledFooter("e edit  d delete  y copy  a add hosts  c custom  ·  Alt+1 hosts  Alt+3 settings  tab search  ? help")
-		}
-	}
+	footer := m.hintFooter("\u21b5 open  C connect  ? help",
+		"\u21b5 open  C connect  ·  o panes  Ctrl+o cmd  ·  n new",
+		"e edit  d delete  y copy  a add hosts  c custom  ·  Alt+1 hosts  Alt+3 settings  tab search  ? help")
+	return renderMainTabBoxWithFooter(m.width, m.height, 1, searchHeader(&m.search, m.width, right), right,
+		m.listOrEmpty(func() string { return m.emptyView("No groups yet.", "n \u2014 create a new group") }), footer)
+}
 
-	listContent := m.list.View()
-	if len(m.list.Items()) == 0 {
-		listContent = m.emptyStateView()
+// deleteView centers the delete question in the list area.
+func (m *groupsModel) deleteView() string {
+	name, hostCount := "", 0
+	if m.deleteIndex >= 0 && m.deleteIndex < len(m.opts.Inventory.Groups) { // a stale index must not crash the view
+		g := m.opts.Inventory.Groups[m.deleteIndex]
+		name, hostCount = g.Name, len(g.Hosts)
 	}
-	return renderMainTabBoxWithFooter(m.width, m.height, 1, searchHeader(&m.search, m.width, right), right, listContent, footer)
+	innerW := max(0, m.width-2)
+	contentH := max(0, max(0, m.height-2)-4)
+	return lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, deleteGroupConfirmBox(innerW, name, hostCount))
 }
 
 func (m *groupsModel) helpKeys() helpMap {
@@ -319,11 +299,6 @@ func (m *groupsModel) helpKeys() helpMap {
 			}},
 		},
 	}
-}
-
-func (m *groupsModel) emptyStateView() string {
-	return m.emptyView(
-		dim.Render("No groups yet.") + "\n" + dim.Render("n \u2014 create a new group"))
 }
 
 func (m *groupsModel) applyFilter(query string) {
