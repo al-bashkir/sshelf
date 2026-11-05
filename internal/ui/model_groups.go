@@ -135,11 +135,7 @@ func (m *groupsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		h := msg.Height
 		m.width = w
 		m.height = h
-		innerW := max(0, w-2)
-		m.list.SetSize(innerW, tabBoxListContentHeight(w, h))
-		promptW := len(m.search.Prompt)
-		reserve := 18
-		m.search.Width = max(10, innerW-reserve-promptW)
+		m.list.SetSize(max(0, w-2), tabBoxListContentHeight(w, h)) // View sizes the search box
 		return m, nil
 	case tea.KeyMsg:
 		if m.showHelp {
@@ -329,7 +325,7 @@ func (m *groupsModel) View() string {
 		modal := deleteGroupConfirmBox(innerW, name, hostCount)
 		placed := lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, modal)
 		right := statusDot(true, false) + "   " + dim.Render(fmt.Sprintf("%d groups", len(m.allRows)))
-		return renderMainTabBox(m.width, m.height, 1, m.search.View(), right, placed)
+		return renderMainTabBox(m.width, m.height, 1, searchHeader(&m.search, m.width, right), right, placed)
 	}
 
 	right := ""
@@ -352,7 +348,7 @@ func (m *groupsModel) View() string {
 	if len(m.list.Items()) == 0 {
 		listContent = m.emptyStateView()
 	}
-	return renderMainTabBoxWithFooter(m.width, m.height, 1, m.search.View(), right, listContent, footer)
+	return renderMainTabBoxWithFooter(m.width, m.height, 1, searchHeader(&m.search, m.width, right), right, listContent, footer)
 }
 
 func (m *groupsModel) helpKeys() helpMap {

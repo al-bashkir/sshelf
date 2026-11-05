@@ -83,7 +83,7 @@ func (m *hostsModel) View() string {
 	if len(m.list.Items()) == 0 {
 		listContent = m.emptyStateView()
 	}
-	return renderMainTabBoxWithFooter(m.width, m.height, 0, m.search.View(), right, listContent, footer)
+	return renderMainTabBoxWithFooter(m.width, m.height, 0, searchHeader(&m.search, m.width, right), right, listContent, footer)
 }
 
 func (m *hostsModel) emptyStateView() string {

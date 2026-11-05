@@ -85,11 +85,7 @@ func (m *groupHostsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		h := msg.Height
 		m.width = w
 		m.height = h
-		innerW := max(0, w-2)
-		m.list.SetSize(innerW, tabBoxListContentHeight(w, h))
-		promptW := len(m.search.Prompt)
-		reserve := 24
-		m.search.Width = max(10, innerW-reserve-promptW)
+		m.list.SetSize(max(0, w-2), tabBoxListContentHeight(w, h)) // View sizes the search box
 		return m, nil
 	case tea.KeyMsg:
 		if m.showHelp {
@@ -256,7 +252,7 @@ func (m *groupHostsModel) View() string {
 		placed := lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, modal)
 		breadcrumb := dim.Render("Groups >") + " " + headerStyle.Render(m.group.Name)
 		right := statusDot(true, false)
-		return renderBreadcrumbTabBox(m.width, m.height, breadcrumb, m.search.View(), right, placed, "")
+		return renderBreadcrumbTabBox(m.width, m.height, breadcrumb, searchHeader(&m.search, m.width, right), right, placed, "")
 	}
 
 	right := ""
@@ -291,7 +287,7 @@ func (m *groupHostsModel) View() string {
 		listContent = m.emptyStateView()
 	}
 	breadcrumb := dim.Render("Groups >") + " " + headerStyle.Render(m.group.Name)
-	return renderBreadcrumbTabBox(m.width, m.height, breadcrumb, m.search.View(), right, listContent, footer)
+	return renderBreadcrumbTabBox(m.width, m.height, breadcrumb, searchHeader(&m.search, m.width, right), right, listContent, footer)
 }
 
 func (m *groupHostsModel) helpKeys() helpMap {

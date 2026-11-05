@@ -16,6 +16,9 @@ func TestMain(m *testing.M) {
 	_ = os.Unsetenv("TMUX")
 	_ = os.Unsetenv("TMUX_PANE")
 	_ = os.Setenv("TMUX_TMPDIR", dir)
+	// Build the styles as Run does; without this they are empty and views
+	// lay out differently from a real session (no borders, no padding).
+	ApplyColorScheme("", "")
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)

@@ -524,7 +524,11 @@ func renderFocusedFrame(w, h int, title string, headerRight string, body string,
 	if foot != "" {
 		content = strings.TrimRight(content, "\n") + "\n" + foot
 	}
-	box := focusedFrameStyle.Width(w).Height(h).Render(content)
+	// lipgloss draws the border outside Width/Height; take it from w x h.
+	box := focusedFrameStyle.
+		Width(w - focusedFrameStyle.GetHorizontalBorderSize()).
+		Height(h - focusedFrameStyle.GetVerticalBorderSize()).
+		Render(content)
 	return withThemeBG(box)
 }
 

@@ -127,11 +127,9 @@ func (m *hostsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, updateSearchOrList(m.focus, &m.search, &m.list, &m.prevSearch, msg, m.applyFilter)
 }
 
+// layout sizes the list; View sizes the search box (see searchHeader).
 func (m *hostsModel) layout() {
-	innerW := max(0, m.width-2)
-	m.list.SetSize(innerW, tabBoxListContentHeight(m.width, m.height))
-	const countsW = 24 // room for the counts right of the search box
-	m.search.Width = max(10, innerW-countsW-len(m.search.Prompt))
+	m.list.SetSize(max(0, m.width-2), tabBoxListContentHeight(m.width, m.height))
 }
 
 func (m *hostsModel) reloaded(msg knownHostsReloadMsg) {

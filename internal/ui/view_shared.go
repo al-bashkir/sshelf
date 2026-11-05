@@ -9,6 +9,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// searchHeader fits the search box into the tab box header next to right and
+// returns its view. joinHeader leaves the left part innerW-width(right)-1
+// columns and cuts it from the right, where the cursor is, so the box must
+// fit instead of being cut. It re-scrolls so the cursor stays in view.
+func searchHeader(search *textinput.Model, width int, right string) string {
+	room := max(0, width-2) - lipgloss.Width(right) - 1
+	search.Width = max(10, room-lipgloss.Width(search.Prompt)-1) // the cursor takes one cell
+	search.SetCursor(search.Position())
+	return search.View()
+}
+
 // pickerStatusLine renders a modal picker's footer: caller-supplied counts,
 // then page indicator, toast, and the current search query.
 func pickerStatusLine(left string, l *list.Model, query string, t toast) string {
