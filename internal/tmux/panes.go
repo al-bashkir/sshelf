@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -17,70 +18,49 @@ type PaneSettings struct {
 
 // ResolvePaneSettings merges defaults and optional group overrides into PaneSettings.
 func ResolvePaneSettings(defaults config.Defaults, group *config.Group, paneCount int) PaneSettings {
-	split := strings.TrimSpace(defaults.PaneSplit)
-	layout := strings.TrimSpace(defaults.PaneLayout)
-	sync := strings.TrimSpace(defaults.PaneSync)
-	borderFmt := strings.TrimSpace(defaults.PaneBorderFmt)
-	borderPos := strings.TrimSpace(defaults.PaneBorderPos)
-
+	var g config.Group
 	if group != nil {
-		if v := strings.TrimSpace(group.PaneSplit); v != "" {
-			split = v
-		}
-		if v := strings.TrimSpace(group.PaneLayout); v != "" {
-			layout = v
-		}
-		if v := strings.TrimSpace(group.PaneSync); v != "" {
-			sync = v
-		}
-		if v := strings.TrimSpace(group.PaneBorderFmt); v != "" {
-			borderFmt = v
-		}
-		if v := strings.TrimSpace(group.PaneBorderPos); v != "" {
-			borderPos = v
-		}
+		g = *group
 	}
+	// A non-blank group value wins over the default.
+	split := strings.ToLower(orDefault(g.PaneSplit, strings.TrimSpace(defaults.PaneSplit)))
+	sync := strings.ToLower(orDefault(g.PaneSync, strings.TrimSpace(defaults.PaneSync)))
 
 	// Anything that is not an explicit "vertical" splits horizontally.
 	splitFlag := "-h"
-	if v := strings.ToLower(strings.TrimSpace(split)); v == "vertical" || v == "v" {
+	if split == "vertical" || split == "v" {
 		splitFlag = "-v"
-	}
-
-	layoutName := ""
-	switch strings.ToLower(strings.TrimSpace(layout)) {
-	case "", "auto":
-		if paneCount >= 4 {
-			layoutName = "tiled"
-		} else {
-			layoutName = "even-vertical"
-		}
-	case "t", "tiled":
-		layoutName = "tiled"
-	case "eh", "even-horizontal":
-		layoutName = "even-horizontal"
-	case "ev", "even-vertical":
-		layoutName = "even-vertical"
-	case "mh", "main-horizontal":
-		layoutName = "main-horizontal"
-	case "mv", "main-vertical":
-		layoutName = "main-vertical"
-	default:
-		layoutName = strings.TrimSpace(layout)
-	}
-
-	// Sync is on unless explicitly disabled.
-	syncOn := true
-	switch strings.ToLower(strings.TrimSpace(sync)) {
-	case "off", "false", "0", "no":
-		syncOn = false
 	}
 
 	return PaneSettings{
 		SplitFlag:    splitFlag,
-		Layout:       layoutName,
-		SyncPanes:    syncOn,
-		BorderFormat: borderFmt,
-		BorderStatus: borderPos,
+		Layout:       layoutName(orDefault(g.PaneLayout, strings.TrimSpace(defaults.PaneLayout)), paneCount),
+		SyncPanes:    !slices.Contains([]string{"off", "false", "0", "no"}, sync), // on unless disabled
+		BorderFormat: orDefault(g.PaneBorderFmt, strings.TrimSpace(defaults.PaneBorderFmt)),
+		BorderStatus: orDefault(g.PaneBorderPos, strings.TrimSpace(defaults.PaneBorderPos)),
 	}
+}
+
+var layoutAliases = map[string]string{
+	"t": "tiled", "tiled": "tiled",
+	"eh": "even-horizontal", "even-horizontal": "even-horizontal",
+	"ev": "even-vertical", "even-vertical": "even-vertical",
+	"mh": "main-horizontal", "main-horizontal": "main-horizontal",
+	"mv": "main-vertical", "main-vertical": "main-vertical",
+}
+
+// layoutName maps a trimmed layout setting to a tmux layout. Blank or "auto"
+// picks by pane count; an unknown name passes through unchanged.
+func layoutName(layout string, paneCount int) string {
+	key := strings.ToLower(layout)
+	if key == "" || key == "auto" {
+		if paneCount >= 4 {
+			return "tiled"
+		}
+		return "even-vertical"
+	}
+	if name, ok := layoutAliases[key]; ok {
+		return name
+	}
+	return layout
 }

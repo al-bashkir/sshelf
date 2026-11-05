@@ -15,38 +15,26 @@ const (
 
 func ResolveOpenMode(tmuxSetting string, openModeSetting string, inTmux bool) OpenMode {
 	tmuxSetting = strings.ToLower(strings.TrimSpace(tmuxSetting))
-	openModeSetting = strings.ToLower(strings.TrimSpace(openModeSetting))
+	mode := OpenMode(strings.ToLower(strings.TrimSpace(openModeSetting)))
 
 	if tmuxSetting == "never" {
 		return OpenCurrent
 	}
-
 	if tmuxSetting == "force" {
-		if openModeSetting == string(OpenPane) {
+		if mode == OpenPane {
 			return OpenPane
 		}
 		return OpenWindow
 	}
-
-	switch openModeSetting {
-	case string(OpenCurrent):
-		return OpenCurrent
-	case string(OpenWindow):
-		return OpenWindow
-	case string(OpenPane):
-		return OpenPane
-	case "", "auto":
-		if inTmux {
-			return OpenWindow
-		}
-		return OpenCurrent
-	default:
-		// Unknown value: keep MVP behavior predictable.
-		if inTmux {
-			return OpenWindow
-		}
-		return OpenCurrent
+	switch mode {
+	case OpenCurrent, OpenWindow, OpenPane:
+		return mode
 	}
+	// "", "auto" and unknown values.
+	if inTmux {
+		return OpenWindow
+	}
+	return OpenCurrent
 }
 
 func NewWindowCmd(name string, sshCmd []string) []string {

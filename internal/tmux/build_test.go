@@ -19,6 +19,13 @@ func TestResolveOpenMode(t *testing.T) {
 		{"auto not in tmux defaults current", "auto", "auto", false, OpenCurrent},
 		{"auto in tmux defaults window", "auto", "auto", true, OpenWindow},
 		{"explicit window", "auto", "tmux-window", false, OpenWindow},
+		{"explicit current in tmux", "auto", "current", true, OpenCurrent},
+		{"explicit pane", "auto", "tmux-pane", false, OpenPane},
+		{"empty mode in tmux", "", "", true, OpenWindow},
+		{"unknown mode in tmux", "auto", "bogus", true, OpenWindow},
+		{"unknown mode outside tmux", "auto", "bogus", false, OpenCurrent},
+		{"case and spaces", " FORCE ", " TMUX-PANE ", false, OpenPane},
+		{"never is case blind", "NEVER", "tmux-pane", true, OpenCurrent},
 	}
 
 	for _, tt := range tc {

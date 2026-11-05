@@ -71,6 +71,9 @@ func TestResolvePaneSettingsLayout(t *testing.T) {
 		{"t", 2, "tiled"}, {"eh", 2, "even-horizontal"}, {"even-horizontal", 2, "even-horizontal"},
 		{"ev", 2, "even-vertical"}, {"mh", 2, "main-horizontal"}, {"mv", 2, "main-vertical"},
 		{" custom-layout ", 2, "custom-layout"},
+		{"tiled", 2, "tiled"}, {"even-vertical", 2, "even-vertical"},
+		{"main-horizontal", 2, "main-horizontal"}, {"main-vertical", 2, "main-vertical"},
+		{" MH ", 2, "main-horizontal"}, {"Custom", 2, "Custom"},
 	}
 	for _, tc := range tests {
 		if got := ResolvePaneSettings(config.Defaults{PaneLayout: tc.layout}, nil, tc.panes).Layout; got != tc.want {
