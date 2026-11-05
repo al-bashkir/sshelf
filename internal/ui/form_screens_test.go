@@ -375,3 +375,26 @@ func TestSettingsFieldHelpPreview(t *testing.T) {
 		t.Fatal("help text still shows after choosing no")
 	}
 }
+
+// Group: the border formats offer "inherit" and cannot be changed.
+// Settings: no "inherit", and a can add a format.
+func TestFormScreensBorderFormatChoices(t *testing.T) {
+	for _, c := range formScreenCases() {
+		if c.borderPicker == nil {
+			continue
+		}
+		t.Run(c.name, func(t *testing.T) {
+			m := c.new()
+			m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+			keys(m, "k", "enter")
+			group := c.name == "group"
+			if got := strings.Contains(plainView(m), "inherit  (use defaults)"); got != group {
+				t.Fatalf("inherit row shown=%v, want %v:\n%s", got, group, plainView(m))
+			}
+			m.Update(hk("a"))
+			if got := strings.Contains(plainView(m), "new: "); got == group {
+				t.Fatalf("a opened the add box=%v, want %v:\n%s", got, !group, plainView(m))
+			}
+		})
+	}
+}

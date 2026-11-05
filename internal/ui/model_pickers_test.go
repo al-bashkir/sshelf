@@ -323,3 +323,51 @@ func TestGroupPickerAddingLines(t *testing.T) {
 		}
 	}
 }
+
+// Hidden hosts can still be added to a group, so the picker lists them,
+// unmarked.
+func TestHostPickerListsHiddenHosts(t *testing.T) {
+	m := newHostPickerModel(Options{Config: config.DefaultConfig(), Hosts: []string{"alpha", "beta"},
+		Inventory: config.Inventory{Hosts: []config.Host{{Host: "beta", Hidden: true}}}})
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	screenShows(t, m, []string{"alpha", "beta"}, "⊘")
+	sendKeys(m, "/", "b")
+	screenShows(t, m, []string{"beta"}, "⊘")
+}
+
+// A search moves the cursor to the first match.
+func TestGroupPickerSearchMovesToTheTop(t *testing.T) {
+	m := groupPicker()
+	sendKeys(m, "j", "j", "/", "d", "b")
+	if d, ok := keys(m, "enter", "enter").(groupPickerDoneMsg); !ok || d.groupIndex != 1 {
+		t.Fatalf("picked %#v, want db (1)", d)
+	}
+}
+
+func TestGroupPickerAddingLinesAtTheLimits(t *testing.T) {
+	a, b, c := strings.Repeat("a", 28), strings.Repeat("b", 15), strings.Repeat("c", 14)
+	for _, tc := range []struct {
+		name  string
+		hosts []string
+		width int
+		want  []string
+	}{
+		{"just wide enough for names", []string{"alpha", "beta"}, 13, []string{"adding 2: al…", "beta"}},
+		{"a name that fills the line exactly stays", []string{"alpha-1", "abcdefghijk"}, 30,
+			[]string{"adding 2: alpha-1, abcdefghijk"}},
+		{"+N more that fills the line exactly", []string{a, b, c, strings.Repeat("d", 10), "eee"}, 40,
+			[]string{"adding 5: " + a, b + ", " + c + ", +2 more"}},
+		{"room for +N is kept from the second line's own width", []string{
+			strings.Repeat("a", 25), strings.Repeat("b", 13), strings.Repeat("c", 13), "dddd", "e"}, 40,
+			[]string{"adding 5: " + strings.Repeat("a", 25), strings.Repeat("b", 13) + ", " + strings.Repeat("c", 13) + ", dddd, e"}},
+	} {
+		m := groupPicker(tc.hosts...)
+		var got []string
+		for _, l := range m.addingLines(tc.width) {
+			got = append(got, ansi.Strip(l))
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

@@ -278,7 +278,11 @@ func TestPickerOverlayDropsBelowOrFlipsAbove(t *testing.T) {
 		{"flip above", rows(10, strings.Repeat("-", 40)), 8, 3},
 		{"little room either way", rows(6, strings.Repeat("-", 40)), 2, 3},
 		{"flip above, top cut", rows(7, strings.Repeat("-", 40)), 4, -1},
-		{"short rows", rows(10, ""), 1, 2},
+		{"empty rows", rows(10, ""), 1, 2},
+		{"short rows", rows(10, "x"), 1, 2},
+		{"one row short below: flip", rows(10, strings.Repeat("-", 40)), 5, 0},
+		{"just fits below: stay", rows(12, strings.Repeat("-", 40)), 6, 7},
+		{"short both ways, equal room: stay", rows(9, strings.Repeat("-", 40)), 4, 5},
 	} {
 		got := f.overlayPickerOnVisible(c.bg, c.focusRow, 40)
 		if len(got) != len(c.bg) {
@@ -295,7 +299,8 @@ func TestPickerOverlayDropsBelowOrFlipsAbove(t *testing.T) {
 		}
 	}
 	// A narrow form gives the popup at least 20 columns, or all it has.
-	for innerW, wantW := range map[int]int{25: 20, 15: 15} {
+	// A form a little wider gives the popup the room right of the labels.
+	for innerW, wantW := range map[int]int{25: 20, 15: 15, 33: 21} {
 		got := f.overlayPickerOnVisible(rows(8, ""), 0, innerW)
 		if w := lipgloss.Width(ansi.Strip(got[1])); w != col+wantW {
 			t.Fatalf("innerW %d: popup %d wide, want %d", innerW, w-col, wantW)
@@ -340,6 +345,33 @@ func TestOptionPickerView(t *testing.T) {
 	} {
 		if got := view(c.p, c.maxW); got != c.want {
 			t.Fatalf("%s:\n%s\nwant\n%s", c.name, got, c.want)
+		}
+	}
+}
+
+func TestFormTextFieldCharLimit(t *testing.T) {
+	f := formOf(map[string]string{"a": "", "b": ""},
+		fieldDef{Key: "a", Label: "A", Kind: fieldText},
+		fieldDef{Key: "b", Label: "B", Kind: fieldText, CharLimit: 5},
+	)
+	long := strings.Repeat("x", 300)
+	formKeys(f, "i", long, "esc", "j", "i", long, "esc")
+	if a, b := len(f.value("a")), len(f.value("b")); a != 256 || b != 5 {
+		t.Fatalf("typed %d and %d chars, want 256 (the default) and 5", a, b)
+	}
+}
+
+func TestFormResizeSetsFieldWidths(t *testing.T) {
+	f := formOf(map[string]string{"name": "", "port": ""},
+		fieldDef{Key: "name", Label: "Name", Kind: fieldText},
+		fieldDef{Key: "port", Label: "Port", Kind: fieldNumber, Narrow: true},
+	)
+	// The value column is the box less borders, indent, label and a space;
+	// a narrow field takes at most 12, any field at least 10.
+	for _, c := range []struct{ w, name, port int }{{80, 65, 12}, {20, 10, 10}} {
+		f.handleResize(c.w, 24)
+		if n, p := f.input("name").Width, f.input("port").Width; n != c.name || p != c.port {
+			t.Fatalf("width %d: name %d port %d, want %d and %d", c.w, n, p, c.name, c.port)
 		}
 	}
 }
