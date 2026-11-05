@@ -6,34 +6,32 @@ import (
 	"github.com/al-bashkir/sshelf/internal/config"
 )
 
-func runCompletion(args []string) {
+func (c cli) completion(args []string) error {
 	if len(args) == 0 {
-		fatal(fmt.Errorf("completion requires a shell: bash or zsh\nUsage: sshelf completion bash|zsh"))
+		return fmt.Errorf("completion requires a shell: bash or zsh\nUsage: sshelf completion bash|zsh")
 	}
-	switch args[0] {
-	case "bash":
-		fmt.Print(bashCompletionScript)
-	case "zsh":
-		fmt.Print(zshCompletionScript)
-	default:
-		fatal(fmt.Errorf("unknown shell %q: use bash or zsh", args[0]))
+	script, ok := map[string]string{"bash": bashCompletionScript, "zsh": zshCompletionScript}[args[0]]
+	if !ok {
+		return fmt.Errorf("unknown shell %q: use bash or zsh", args[0])
 	}
+	_, _ = fmt.Fprint(c.stdout, script)
+	return nil
 }
 
-// runInternalComplete is called by shell completion scripts to get dynamic candidates.
+// complete is called by shell completion scripts to get dynamic candidates.
 // It prints one entry per line and is intentionally silent on errors.
-func runInternalComplete(args []string, inv config.Inventory, knownHosts []string) {
+func (c cli) complete(args []string, inv config.Inventory, knownHosts []string) {
 	if len(args) == 0 {
 		return
 	}
 	switch args[0] {
 	case "groups":
 		for _, g := range inv.Groups {
-			fmt.Println(g.Name)
+			_, _ = fmt.Fprintln(c.stdout, g.Name)
 		}
 	case "hosts":
 		for _, h := range knownHosts {
-			fmt.Println(h)
+			_, _ = fmt.Fprintln(c.stdout, h)
 		}
 	}
 	// unknown token → print nothing (graceful for completion scripts)

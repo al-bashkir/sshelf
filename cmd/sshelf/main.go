@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,35 +24,84 @@ func (m *multiFlag) Set(v string) error {
 	return nil
 }
 
+// cli is the process boundary: output streams, and the two steps that take
+// over the terminal (tui) or replace the process (exec). Tests fake them.
+type cli struct {
+	stdout, stderr io.Writer
+	tui            func(ui.Options) error
+	exec           func(argv []string) error
+}
+
 func main() {
+	os.Exit(run(os.Args[1:], cli{stdout: os.Stdout, stderr: os.Stderr, tui: ui.Run, exec: execReplace}))
+}
+
+// run executes one sshelf command line and returns the process exit code.
+func run(args []string, c cli) int {
 	// The pane wrapper needs no flags or config; tmux runs it inside each pane.
-	if len(os.Args) > 1 && os.Args[1] == pane.Subcommand {
-		os.Exit(pane.Main(os.Args[2:]))
+	if len(args) > 0 && args[0] == pane.Subcommand {
+		return pane.Main(args[1:])
 	}
+	f, err := parseFlags(args, c.stderr)
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	if err != nil {
+		return 2 // the flag set already printed the error and usage
+	}
+	if err := c.dispatch(f); err != nil {
+		_, _ = fmt.Fprintln(c.stderr, err)
+		return 1
+	}
+	return 0
+}
 
-	var configPath string
-	var hostsPath string
-	var knownHosts multiFlag
-	var noTmux bool
-	var popup bool
+// globalFlags are the flags that come before a subcommand.
+type globalFlags struct {
+	configPath, hostsPath string
+	knownHosts            multiFlag
+	noTmux, popup         bool
+	args                  []string // the subcommand and its arguments
+}
 
-	flag.StringVar(&configPath, "config", "", "path to config.toml (default: XDG config)")
-	flag.StringVar(&hostsPath, "hosts", "", "path to hosts.toml (default: next to config.toml)")
-	flag.Var(&knownHosts, "known-hosts", "known_hosts path (repeatable)")
-	flag.BoolVar(&noTmux, "no-tmux", false, "disable tmux integration")
-	flag.BoolVar(&popup, "popup", false, "quit after connecting (for tmux popup use)")
-	flag.Usage = usage
-	flag.Parse()
+func parseFlags(args []string, stderr io.Writer) (globalFlags, error) {
+	var f globalFlags
+	fs := flag.NewFlagSet("sshelf", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.StringVar(&f.configPath, "config", "", "path to config.toml (default: XDG config)")
+	fs.StringVar(&f.hostsPath, "hosts", "", "path to hosts.toml (default: next to config.toml)")
+	fs.Var(&f.knownHosts, "known-hosts", "known_hosts path (repeatable)")
+	fs.BoolVar(&f.noTmux, "no-tmux", false, "disable tmux integration")
+	fs.BoolVar(&f.popup, "popup", false, "quit after connecting (for tmux popup use)")
+	fs.Usage = func() { usage(fs) }
+	err := fs.Parse(args)
+	f.args = fs.Args()
+	return f, err
+}
 
+// env is the loaded configuration a command runs against.
+type env struct {
+	cfg        config.Config
+	cfgPath    string
+	inv        config.Inventory
+	invPath    string
+	knownPaths []string
+	known      hosts.LoadResult
+	loadErrs   []hosts.PathError
+}
+
+func load(f globalFlags, stderr io.Writer) (env, error) {
+	configPath := f.configPath
 	if configPath == "" {
 		p, err := config.DefaultPath()
 		if err != nil {
-			fatal(err)
+			return env{}, err
 		}
 		configPath = p
 	}
 
 	// Derive hosts.toml path from config path if not explicitly set.
+	hostsPath := f.hostsPath
 	if hostsPath == "" {
 		hostsPath = config.HostsPathFromConfigPath(configPath)
 	}
@@ -59,78 +109,75 @@ func main() {
 	// Migrate old single-file config if needed. Load after it, so a later
 	// save does not see the migration's rewrite as a change on disk.
 	if err := config.Migrate(configPath, hostsPath); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "warning: config migration failed: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "warning: config migration failed: %v\n", err)
 	}
 
-	cfg, cfgPathUsed, err := config.Load(configPath)
-	if err != nil {
-		fatal(err)
+	var e env
+	var err error
+	if e.cfg, e.cfgPath, err = config.Load(configPath); err != nil {
+		return env{}, err
 	}
-
-	inv, invPathUsed, err := config.LoadInventory(hostsPath)
-	if err != nil {
-		fatal(err)
+	if e.inv, e.invPath, err = config.LoadInventory(hostsPath); err != nil {
+		return env{}, err
 	}
-
-	knownPaths := []string(knownHosts)
-	res := hosts.LoadResult{}
-	var loadErrs []hosts.PathError
-	if cfg.Defaults.LoadKnownHosts {
-		res, loadErrs = hosts.LoadKnownHosts(knownPaths)
+	if e.cfg.Defaults.LoadKnownHosts {
+		e.knownPaths = f.knownHosts
+		e.known, e.loadErrs = hosts.LoadKnownHosts(e.knownPaths)
 	} else {
-		knownPaths = nil
-		res.Hosts = config.ConfigHosts(inv)
+		e.known.Hosts = config.ConfigHosts(e.inv)
 	}
+	return e, nil
+}
 
-	args := flag.Args()
-	if len(args) == 0 {
-		runTUI(ui.Options{
-			ConfigPath:    cfgPathUsed,
-			Config:        cfg,
-			InventoryPath: invPathUsed,
-			Inventory:     inv,
-			KnownHosts:    knownPaths,
-			Hosts:         res.Hosts,
-			SkippedLines:  res.SkippedLines,
-			LoadErrors:    loadErrs,
-			Popup:         popup,
-			NoTmux:        noTmux,
+func (c cli) dispatch(f globalFlags) error {
+	e, err := load(f, c.stderr)
+	if err != nil {
+		return err
+	}
+	if len(f.args) == 0 {
+		return c.runTUI(ui.Options{
+			ConfigPath:    e.cfgPath,
+			Config:        e.cfg,
+			InventoryPath: e.invPath,
+			Inventory:     e.inv,
+			KnownHosts:    e.knownPaths,
+			Hosts:         e.known.Hosts,
+			SkippedLines:  e.known.SkippedLines,
+			LoadErrors:    e.loadErrs,
+			Popup:         f.popup,
+			NoTmux:        f.noTmux,
 		})
-		return
 	}
 
-	switch args[0] {
+	args := f.args[1:]
+	switch f.args[0] {
 	case "connect", "c":
-		runConnect(args[1:], cfg, inv, noTmux)
+		return c.connect(args, e.cfg, e.inv, f.noTmux)
 	case "list", "l":
-		runList(args[1:], inv, res.Hosts)
+		return c.list(args, e.inv, e.known.Hosts)
 	case "completion", "comp":
-		runCompletion(args[1:])
+		return c.completion(args)
 	case "__complete":
-		runInternalComplete(args[1:], inv, res.Hosts)
-	default:
-		fatal(fmt.Errorf("unknown command %q\nUsage: sshelf [flags] [connect|list|completion] ...", args[0]))
+		c.complete(args, e.inv, e.known.Hosts)
+		return nil
 	}
+	return fmt.Errorf("unknown command %q\nUsage: sshelf [flags] [connect|list|completion] ...", f.args[0])
 }
 
-func runTUI(opts ui.Options) {
-	if err := ui.Run(opts); err != nil {
-		var req *ui.ExecRequest
-		if errors.As(err, &req) {
-			if err := execReplace(req.Cmd); err != nil {
-				fatal(err)
-			}
-			return
-		}
-		if errors.Is(err, ui.ErrQuit) {
-			return
-		}
-		fatal(err)
+func (c cli) runTUI(opts ui.Options) error {
+	err := c.tui(opts)
+	var req *ui.ExecRequest
+	if errors.As(err, &req) {
+		return c.exec(req.Cmd)
 	}
+	if errors.Is(err, ui.ErrQuit) {
+		return nil
+	}
+	return err
 }
 
-func usage() {
-	fmt.Fprintf(os.Stderr, `sshelf — terminal UI and CLI for SSH connections
+func usage(fs *flag.FlagSet) {
+	_, _ = fmt.Fprint(fs.Output(), `sshelf — terminal UI and CLI for SSH connections
 
 Usage:
   sshelf [flags]                        launch interactive TUI
@@ -144,12 +191,7 @@ Subcommand aliases:  connect=c  list=l  host=h  group=g  hosts=h  groups=g
 
 Flags:
 `)
-	flag.PrintDefaults()
-}
-
-func fatal(err error) {
-	_, _ = fmt.Fprintln(os.Stderr, err)
-	os.Exit(1)
+	fs.PrintDefaults()
 }
 
 func execReplace(cmd []string) error {

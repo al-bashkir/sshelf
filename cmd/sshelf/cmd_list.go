@@ -4,35 +4,33 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
 
 	"github.com/al-bashkir/sshelf/internal/config"
 )
 
-func runList(args []string, inv config.Inventory, knownHosts []string) {
+func (c cli) list(args []string, inv config.Inventory, knownHosts []string) error {
 	if len(args) == 0 {
-		fatal(fmt.Errorf("list requires a subcommand: groups|g or hosts|h\nUsage: sshelf list groups|hosts [--json]"))
+		return fmt.Errorf("list requires a subcommand: groups|g or hosts|h\nUsage: sshelf list groups|hosts [--json]")
 	}
 
 	sub := args[0]
 	fs := flag.NewFlagSet("list "+sub, flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
+	fs.SetOutput(c.stderr)
 	jsonOut := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
-		fatal(err)
+		return err
 	}
 
 	switch sub {
 	case "groups", "g":
-		listGroups(inv, *jsonOut)
+		return c.listGroups(inv, *jsonOut)
 	case "hosts", "h":
-		listHosts(knownHosts, *jsonOut)
-	default:
-		fatal(fmt.Errorf("unknown list subcommand %q: use groups|g or hosts|h", sub))
+		return c.listHosts(knownHosts, *jsonOut)
 	}
+	return fmt.Errorf("unknown list subcommand %q: use groups|g or hosts|h", sub)
 }
 
-func listGroups(inv config.Inventory, asJSON bool) {
+func (c cli) listGroups(inv config.Inventory, asJSON bool) error {
 	if asJSON {
 		type groupJSON struct {
 			Name  string   `json:"name"`
@@ -40,38 +38,29 @@ func listGroups(inv config.Inventory, asJSON bool) {
 		}
 		out := make([]groupJSON, 0, len(inv.Groups))
 		for _, g := range inv.Groups {
-			hosts := g.Hosts
-			if hosts == nil {
-				hosts = []string{}
-			}
-			out = append(out, groupJSON{Name: g.Name, Hosts: hosts})
+			// A non-nil slice prints as [] instead of null.
+			out = append(out, groupJSON{Name: g.Name, Hosts: append([]string{}, g.Hosts...)})
 		}
-		printJSON(out)
-		return
+		return c.printJSON(out)
 	}
 	for _, g := range inv.Groups {
-		fmt.Printf("%s (%d hosts)\n", g.Name, len(g.Hosts))
+		_, _ = fmt.Fprintf(c.stdout, "%s (%d hosts)\n", g.Name, len(g.Hosts))
 	}
+	return nil
 }
 
-func listHosts(hosts []string, asJSON bool) {
+func (c cli) listHosts(hosts []string, asJSON bool) error {
 	if asJSON {
-		out := hosts
-		if out == nil {
-			out = []string{}
-		}
-		printJSON(out)
-		return
+		return c.printJSON(append([]string{}, hosts...)) // [] instead of null
 	}
 	for _, h := range hosts {
-		fmt.Println(h)
+		_, _ = fmt.Fprintln(c.stdout, h)
 	}
+	return nil
 }
 
-func printJSON(v any) {
-	enc := json.NewEncoder(os.Stdout)
+func (c cli) printJSON(v any) error {
+	enc := json.NewEncoder(c.stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		fatal(err)
-	}
+	return enc.Encode(v)
 }
