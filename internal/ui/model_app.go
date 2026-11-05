@@ -166,7 +166,8 @@ func (m *appModel) Init() tea.Cmd {
 }
 
 // screenModel is the model behind one screen and the size it takes from the
-// window.
+// window. A screen with a size is a modal, drawn centered in the window; one
+// without fills the window as a tab.
 type screenModel struct {
 	id    screen
 	model tea.Model                 // nil while the screen is not open
@@ -381,26 +382,13 @@ func (m *appModel) exitOr(st exitState, cmd tea.Cmd) tea.Cmd {
 }
 
 func (m *appModel) View() string {
-	var s string
-	switch m.screen {
-	case screenGroups:
-		s = m.groups.View()
-	case screenGroupForm:
-		s = placeCentered(m.width, m.height, m.form.View())
-	case screenGroupHosts:
-		s = m.gh.View()
-	case screenHostPicker:
-		s = placeCentered(m.width, m.height, m.picker.View())
-	case screenGroupPicker:
-		s = placeCentered(m.width, m.height, m.gp.View())
-	case screenDefaultsForm:
-		s = m.defaultsForm.View()
-	case screenCustomHost:
-		s = placeCentered(m.width, m.height, m.customHost.View())
-	case screenHostForm:
-		s = placeCentered(m.width, m.height, m.hostForm.View())
-	default:
-		s = m.hosts.View()
+	sm := m.screenModel(m.screen)
+	if sm.model == nil {
+		sm = m.screenModel(screenHosts)
+	}
+	s := sm.model.View()
+	if sm.size != nil {
+		s = placeCentered(m.width, m.height, s)
 	}
 	// Apply theme background to the entire screen output so every pixel —
 	// including lipgloss.Place padding around modal dialogs — uses the

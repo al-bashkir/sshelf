@@ -782,3 +782,57 @@ func TestRouterForwardsOtherMessagesToTheScreen(t *testing.T) {
 		}
 	})
 }
+
+func TestRouterView(t *testing.T) {
+	// No colorscheme is active in tests, so the theme background adds nothing.
+	t.Run("a tab screen fills the window itself", func(t *testing.T) {
+		cases := []struct {
+			open tea.Msg
+			view func(m *appModel) string
+		}{
+			{nil, func(m *appModel) string { return m.hosts.View() }},
+			{switchScreenMsg{to: screenGroups}, func(m *appModel) string { return m.groups.View() }},
+			{openGroupHostsMsg{index: 0}, func(m *appModel) string { return m.gh.View() }},
+			{openDefaultsFormMsg{returnTo: screenHosts}, func(m *appModel) string { return m.defaultsForm.View() }},
+		}
+		for _, c := range cases {
+			m := routerApp(t)
+			if c.open != nil {
+				m.Update(c.open)
+			}
+			if got, want := m.View(), c.view(m); got != want {
+				t.Fatalf("screen %v: view is not the screen's own view", m.screen)
+			}
+		}
+	})
+	t.Run("a modal is centered in the window", func(t *testing.T) {
+		cases := []struct {
+			open tea.Msg
+			view func(m *appModel) string
+		}{
+			{openGroupFormMsg{index: 0}, func(m *appModel) string { return m.form.View() }},
+			{openHostPickerMsg{groupIndex: 0, returnTo: screenHosts}, func(m *appModel) string { return m.picker.View() }},
+			{openGroupPickerMsg{hosts: []string{"db"}}, func(m *appModel) string { return m.gp.View() }},
+			{openCustomHostMsg{returnTo: screenHosts, groupIndex: -1}, func(m *appModel) string { return m.customHost.View() }},
+			{openHostFormMsg{host: "web", returnTo: screenHosts}, func(m *appModel) string { return m.hostForm.View() }},
+		}
+		for _, c := range cases {
+			m := routerApp(t)
+			m.Update(c.open)
+			got := m.View()
+			if got != placeCentered(100, 30, c.view(m)) {
+				t.Fatalf("screen %v: view is not the modal centered in 100x30", m.screen)
+			}
+			if lines := strings.Split(got, "\n"); len(lines) != 30 || strings.TrimSpace(lines[0]) != "" {
+				t.Fatalf("screen %v: %d lines, first %q; want 30 lines and a blank margin on top", m.screen, len(lines), lines[0])
+			}
+		}
+	})
+	t.Run("an unknown screen shows Hosts", func(t *testing.T) {
+		m := routerApp(t)
+		m.screen = screen(99)
+		if m.View() != m.hosts.View() {
+			t.Fatal("unknown screen does not show the hosts view")
+		}
+	})
+}
