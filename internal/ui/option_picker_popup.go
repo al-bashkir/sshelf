@@ -50,12 +50,10 @@ func (p *optionPickerPopup) moveDown() {
 	}
 }
 
-// selected returns the value of the currently highlighted option.
+// selected returns the value of the highlighted option; the cursor always
+// sits on one, as the popup opens only with options.
 func (p *optionPickerPopup) selected() string {
-	if p.cursor >= 0 && p.cursor < len(p.options) {
-		return p.options[p.cursor].Value
-	}
-	return ""
+	return p.options[p.cursor].Value
 }
 
 // View renders the popup as a box-drawing framed list.

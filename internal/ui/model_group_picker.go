@@ -163,7 +163,7 @@ func (p *hostLines) add(li int, h string, rest int) bool {
 	if w > room && sepW > 0 {
 		return false
 	}
-	h = truncateTail(h, max(1, room))
+	h = truncateTail(h, room) // room >= 3: addingLines shows names only from prefix+3 wide
 	p.lines[li] = append(p.lines[li], h)
 	p.used[li] += sepW + lipgloss.Width(h)
 	return true

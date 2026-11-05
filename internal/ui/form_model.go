@@ -104,22 +104,14 @@ func newFormModel(schema formSchema, values map[string]string, labelWidth int, s
 	}
 
 	m.rebuildItems()
-
-	// Focus the first enabled field.
-	if len(m.items) > 0 {
-		m.focusIdx = 0
-		// Skip disabled fields.
-		for i := 0; i < len(m.items); i++ {
-			item := m.items[i]
-			fd := &m.schema.Sections[item.sectionIdx].Fields[item.fieldIdx]
-			if m.isFieldDisabled(fd) == "" {
-				m.focusIdx = i
-				break
-			}
+	// Focus the first enabled field (the first field when all are disabled).
+	for i := range m.items {
+		if m.isFieldDisabled(m.fieldAt(i)) == "" {
+			m.focusIdx = i
+			break
 		}
-		m.applyFocusStyles()
 	}
-
+	m.applyFocusStyles()
 	return m
 }
 
@@ -183,24 +175,19 @@ func (m *formModel) rebuildItems() {
 // Focus queries
 // ---------------------------------------------------------------------------
 
-// focusedItem returns the currently focused navigation item.
-func (m *formModel) focusedItem() formNavItem {
-	if m.focusIdx >= 0 && m.focusIdx < len(m.items) {
-		return m.items[m.focusIdx]
-	}
-	return formNavItem{}
+// fieldAt returns the field of navigation item i.
+func (m *formModel) fieldAt(i int) *fieldDef {
+	it := m.items[i]
+	return &m.schema.Sections[it.sectionIdx].Fields[it.fieldIdx]
 }
 
-// focusedField returns the definition of the focused field, or nil.
+// focusedField returns the definition of the focused field, or nil in a
+// form with no fields. focusIdx is always a valid item otherwise.
 func (m *formModel) focusedField() *fieldDef {
-	item := m.focusedItem()
-	if item.sectionIdx < len(m.schema.Sections) {
-		sec := &m.schema.Sections[item.sectionIdx]
-		if item.fieldIdx < len(sec.Fields) {
-			return &sec.Fields[item.fieldIdx]
-		}
+	if m.focusIdx >= len(m.items) {
+		return nil
 	}
-	return nil
+	return m.fieldAt(m.focusIdx)
 }
 
 // focusedFieldKey returns the key of the focused field, or "".
@@ -246,11 +233,8 @@ func (m *formModel) applyFocusStyles() {
 	}
 }
 
-// setFocusIdx moves focus to the given item index.
+// setFocusIdx moves focus to item idx.
 func (m *formModel) setFocusIdx(idx int) {
-	if idx < 0 || idx >= len(m.items) {
-		return
-	}
 	m.exitEdit()
 	m.focusIdx = idx
 	m.applyFocusStyles()
@@ -260,28 +244,14 @@ func (m *formModel) setFocusIdx(idx int) {
 // Disabled fields are skipped; if all fields are disabled, focus stays put.
 func (m *formModel) moveFocus(delta int) {
 	n := len(m.items)
-	if n == 0 {
-		return
-	}
 	pos := m.focusIdx
-	for step := 0; step < n; step++ {
-		pos += delta
-		if pos < 0 {
-			pos = n - 1
-		}
-		if pos >= n {
-			pos = 0
-		}
-		// Check if the candidate is enabled.
-		item := m.items[pos]
-		sec := &m.schema.Sections[item.sectionIdx]
-		fd := &sec.Fields[item.fieldIdx]
-		if m.isFieldDisabled(fd) == "" {
+	for range n {
+		pos = (pos + delta + n) % n
+		if m.isFieldDisabled(m.fieldAt(pos)) == "" {
 			m.setFocusIdx(pos)
 			return
 		}
 	}
-	// All fields disabled — don't move.
 }
 
 // ---------------------------------------------------------------------------
@@ -306,28 +276,20 @@ func (m *formModel) exitEdit() {
 		return
 	}
 	m.editing = false
-	if fd := m.focusedField(); fd != nil && fd.isTextField() {
-		if in := m.input(fd.Key); in != nil {
-			m.values[fd.Key] = in.Value()
-			in.Blur()
-		}
-		m.validateField(fd)
-	}
+	fd := m.focusedField() // insert mode is only ever on a text field
+	in := m.input(fd.Key)
+	m.values[fd.Key] = in.Value()
+	in.Blur()
+	m.validateField(fd)
 }
 
-// updateFocusedInput routes a key message to the focused text input and
-// syncs the value back.
+// updateFocusedInput types a key into the focused text input (insert mode)
+// and syncs the value back.
 func (m *formModel) updateFocusedInput(msg tea.Msg) tea.Cmd {
 	fd := m.focusedField()
-	if fd == nil || !fd.isTextField() {
-		return nil
-	}
 	in := m.input(fd.Key)
-	if in == nil {
-		return nil
-	}
-	newIn, cmd := in.Update(msg)
-	*in = newIn
+	var cmd tea.Cmd
+	*in, cmd = in.Update(msg)
 	m.values[fd.Key] = in.Value()
 	return cmd
 }
@@ -508,8 +470,7 @@ func (m *formModel) handleResize(w, h int) {
 	innerW := max(0, w-2)
 	fieldW := max(10, innerW-m.fieldIndent-m.labelWidth-1)
 	for i := range m.inputs {
-		fd := m.schema.fieldByKey(m.inputs[i].key)
-		if fd != nil && fd.Narrow {
+		if m.schema.fieldByKey(m.inputs[i].key).Narrow {
 			m.inputs[i].input.Width = min(12, fieldW)
 		} else {
 			m.inputs[i].input.Width = fieldW
