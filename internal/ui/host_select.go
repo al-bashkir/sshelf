@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -206,36 +207,31 @@ func restoreCursor(l *list.Model, all, visible []string, prev string) {
 	if len(visible) == 0 {
 		return
 	}
-	if prev != "" {
-		pos := make(map[string]int, len(visible))
-		for i, k := range visible {
-			pos[k] = i
-		}
-		if i, ok := pos[prev]; ok {
-			l.Select(i)
-			return
-		}
-		prevIdx := -1
-		for i, k := range all {
-			if k == prev {
-				prevIdx = i
-				break
-			}
-		}
-		if prevIdx >= 0 {
-			for j := prevIdx + 1; j < len(all); j++ {
-				if i, ok := pos[all[j]]; ok {
-					l.Select(i)
-					return
-				}
-			}
-			for j := prevIdx - 1; j >= 0; j-- {
-				if i, ok := pos[all[j]]; ok {
-					l.Select(i)
-					return
-				}
-			}
+	l.Select(cursorRow(all, visible, prev))
+}
+
+// cursorRow returns the row in visible for restoreCursor.
+func cursorRow(all, visible []string, prev string) int {
+	if prev == "" {
+		return 0
+	}
+	pos := make(map[string]int, len(visible))
+	for i, k := range visible {
+		pos[k] = i
+	}
+	if i, ok := pos[prev]; ok {
+		return i
+	}
+	p := slices.Index(all, prev)
+	if p < 0 {
+		return 0
+	}
+	before := slices.Clone(all[:p])
+	slices.Reverse(before)
+	for _, k := range slices.Concat(all[p+1:], before) { // forward, then backward
+		if i, ok := pos[k]; ok {
+			return i
 		}
 	}
-	l.Select(0)
+	return 0
 }

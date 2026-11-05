@@ -204,17 +204,11 @@ func applySettingsValues(values map[string]string, base config.Defaults) (config
 		d.TmuxSession = "sshelf"
 	}
 
-	// Threshold.
-	threshStr := strings.TrimSpace(values["threshold"])
-	if threshStr == "" {
-		d.ConnectConfirmThreshold = 5
-	} else {
-		t, err := strconv.Atoi(threshStr)
-		if err != nil || t < 0 {
-			return d, fmt.Errorf("confirm threshold must be a number >= 0")
-		}
-		d.ConnectConfirmThreshold = t
+	t, err := parseThreshold(values["threshold"])
+	if err != nil {
+		return d, err
 	}
+	d.ConnectConfirmThreshold = t
 
 	// Pane fields.
 	d.PaneSplit = strings.TrimSpace(values["pane_split"])
@@ -228,10 +222,29 @@ func applySettingsValues(values map[string]string, base config.Defaults) (config
 		d.PaneBorderFmt = config.DefaultPaneBorderFormat
 	}
 
-	// Sanitize custom formats list.
-	clean := make([]string, 0, len(d.PaneBorderFmts))
+	d.PaneBorderFmts = cleanBorderFormats(d.PaneBorderFmts)
+	return d, nil
+}
+
+// parseThreshold parses the connect-confirm threshold; empty means 5.
+func parseThreshold(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 5, nil
+	}
+	t, err := strconv.Atoi(s)
+	if err != nil || t < 0 {
+		return 0, fmt.Errorf("confirm threshold must be a number >= 0")
+	}
+	return t, nil
+}
+
+// cleanBorderFormats trims the custom pane border formats and drops blanks,
+// duplicates and the built-in default.
+func cleanBorderFormats(fmts []string) []string {
+	clean := make([]string, 0, len(fmts))
 	seen := map[string]bool{strings.TrimSpace(config.DefaultPaneBorderFormat): true}
-	for _, s := range d.PaneBorderFmts {
+	for _, s := range fmts {
 		v := strings.TrimSpace(s)
 		if v == "" || seen[v] {
 			continue
@@ -239,9 +252,7 @@ func applySettingsValues(values map[string]string, base config.Defaults) (config
 		clean = append(clean, v)
 		seen[v] = true
 	}
-	d.PaneBorderFmts = clean
-
-	return d, nil
+	return clean
 }
 
 // ---------------------------------------------------------------------------

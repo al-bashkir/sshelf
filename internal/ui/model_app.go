@@ -242,18 +242,33 @@ func (m *appModel) applyWindowSize(ws tea.WindowSizeMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// toastSlots returns the hosts, groups and group-hosts toasts, in that
+// order. A screen that is not open gives an empty toast.
+func (m *appModel) toastSlots() [3]toast {
+	var s [3]toast
+	if m.hosts != nil {
+		s[0] = m.hosts.toast
+	}
+	if m.groups != nil {
+		s[1] = m.groups.toast
+	}
+	if m.gh != nil {
+		s[2] = m.gh.toast
+	}
+	return s
+}
+
+// collectToastKey is "" when no toast shows; it changes when a toast does.
 func (m *appModel) collectToastKey() string {
 	var b strings.Builder
-	if m.hosts != nil && !m.hosts.toast.empty() {
-		b.WriteString(m.hosts.toast.text)
-	}
-	if m.groups != nil && !m.groups.toast.empty() {
-		b.WriteByte('|')
-		b.WriteString(m.groups.toast.text)
-	}
-	if m.gh != nil && !m.gh.toast.empty() {
-		b.WriteByte('|')
-		b.WriteString(m.gh.toast.text)
+	for i, t := range m.toastSlots() {
+		if t.empty() {
+			continue
+		}
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		b.WriteString(t.text)
 	}
 	return b.String()
 }
@@ -272,14 +287,10 @@ func (m *appModel) clearToasts() {
 
 func (m *appModel) maxToastLevel() toastLevel {
 	var lvl toastLevel
-	if m.hosts != nil && !m.hosts.toast.empty() && m.hosts.toast.level > lvl {
-		lvl = m.hosts.toast.level
-	}
-	if m.groups != nil && !m.groups.toast.empty() && m.groups.toast.level > lvl {
-		lvl = m.groups.toast.level
-	}
-	if m.gh != nil && !m.gh.toast.empty() && m.gh.toast.level > lvl {
-		lvl = m.gh.toast.level
+	for _, t := range m.toastSlots() {
+		if !t.empty() {
+			lvl = max(lvl, t.level)
+		}
 	}
 	return lvl
 }
