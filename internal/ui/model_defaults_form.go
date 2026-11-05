@@ -367,10 +367,7 @@ func (m *defaultsFormModel) View() string {
 	if toastStr != "" {
 		reservedBottom++
 	}
-	visibleH := contentH - reservedBottom
-	if visibleH < 1 {
-		visibleH = 1
-	}
+	visibleH := max(1, contentH-reservedBottom) // keep the focused row
 
 	// Scroll so focused field is visible.
 	start, end := formScrollWindow(len(lines), visibleH, focusLine)

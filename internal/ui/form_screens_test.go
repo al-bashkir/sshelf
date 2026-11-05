@@ -314,6 +314,54 @@ func TestSettingsInsertModeTypesScreenKeys(t *testing.T) {
 	}
 }
 
+func TestSettingsViewShowsPicker(t *testing.T) {
+	m := newDefaultsFormModel(config.DefaultConfig().Defaults, false)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	keys(m, "j", "j", "j", "j", "enter") // load_known_hosts
+	if !strings.Contains(plainView(m), "▸ yes") {
+		t.Fatalf("picker popup missing:\n%s", plainView(m))
+	}
+}
+
+// Settings keeps its toast and footer in the window, when the form is
+// taller than the window and when it is shorter.
+func TestSettingsViewKeepsToastAndFooter(t *testing.T) {
+	m := newDefaultsFormModel(config.DefaultConfig().Defaults, false)
+	check := func(want ...string) {
+		t.Helper()
+		for _, h := range []int{20, 60} {
+			m.Update(tea.WindowSizeMsg{Width: 100, Height: h})
+			for _, w := range want {
+				if v := plainView(m); !strings.Contains(v, w) {
+					t.Fatalf("height %d: %q missing:\n%s", h, w, v)
+				}
+			}
+		}
+	}
+	check("Ctrl+S save")
+	keys(m, "j", "i", "x", "esc", "ctrl+s") // bad port
+	check("invalid port", "Ctrl+S save")
+}
+
+// A picker low in a scrolled form opens next to its field.
+func TestSettingsViewShowsPickerInScrolledForm(t *testing.T) {
+	m := newDefaultsFormModel(config.DefaultConfig().Defaults, false)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	keys(m, "k", "k", "enter") // border_pos, the last picker
+	if !strings.Contains(plainView(m), "▸ bottom") {
+		t.Fatalf("picker popup missing:\n%s", plainView(m))
+	}
+}
+
+// With no room for content, Settings still shows the focused field's row.
+func TestSettingsViewKeepsFocusedRowInATinyWindow(t *testing.T) {
+	m := newDefaultsFormModel(config.DefaultConfig().Defaults, false)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 7}) // one content row
+	if !strings.Contains(plainView(m), "User") {
+		t.Fatalf("focused field missing:\n%s", plainView(m))
+	}
+}
+
 func TestSettingsFieldHelpPreview(t *testing.T) {
 	const helper = "Show helper text below focused form fields"
 	m := newDefaultsFormModel(config.DefaultConfig().Defaults, false)
