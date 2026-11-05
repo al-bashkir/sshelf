@@ -16,6 +16,10 @@
 *.prof
 coverage.out
 
+# crapper / dryer / mutator output
+/.metrics/
+/target/
+
 # Editor / OS
 .DS_Store
 Thumbs.db
