@@ -30,6 +30,8 @@ func hk(s string) tea.KeyMsg {
 		"ctrl+f":    {Type: tea.KeyCtrlF},
 		"ctrl+h":    {Type: tea.KeyCtrlH},
 		"ctrl+o":    {Type: tea.KeyCtrlO},
+		"ctrl+s":    {Type: tea.KeyCtrlS},
+		"alt+1":     {Type: tea.KeyRunes, Runes: []rune("1"), Alt: true},
 		"alt+2":     {Type: tea.KeyRunes, Runes: []rune("2"), Alt: true},
 		"alt+3":     {Type: tea.KeyRunes, Runes: []rune("3"), Alt: true},
 	}

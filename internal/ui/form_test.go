@@ -87,11 +87,12 @@ func press(m tea.Model, s string) tea.Msg {
 	return cmd()
 }
 
-// dirty edits the first field the way a user does: i, a letter, Esc.
+// dirty edits the first field the way a user does: i, a letter, Esc. It
+// does not run the letter's command, a cursor blink that sleeps.
 func dirty(t *testing.T, m tea.Model) {
 	t.Helper()
-	press(m, "i")
-	press(m, "x")
+	m.Update(keyOf("i"))
+	m.Update(keyOf("x"))
 	if press(m, "esc") != nil {
 		t.Fatal("leaving insert mode emitted a message")
 	}

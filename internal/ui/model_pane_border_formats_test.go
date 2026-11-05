@@ -11,8 +11,6 @@ import (
 	"github.com/al-bashkir/sshelf/internal/config"
 )
 
-var enterKey = tea.KeyMsg{Type: tea.KeyEnter}
-
 // borderModel opens the border-format picker over custom formats #A and #B
 // in an 80x24 terminal.
 func borderModel(inherit, edit bool, selected string) *paneBorderFormatsModel {
@@ -21,21 +19,18 @@ func borderModel(inherit, edit bool, selected string) *paneBorderFormatsModel {
 	return m
 }
 
-// keys sends each key in turn; "enter" is a real Enter key.
+// keys sends each key in turn (see hk) and returns the message the last
+// key's command produces, if any. Only the last command runs: a key typed
+// into a text input returns a cursor blink that sleeps.
 func keys(m tea.Model, ks ...string) tea.Msg {
-	var msg tea.Msg
+	var cmd tea.Cmd
 	for _, k := range ks {
-		km := keyOf(k)
-		if k == "enter" {
-			km = enterKey
-		}
-		_, cmd := m.Update(km)
-		msg = nil
-		if cmd != nil {
-			msg = cmd()
-		}
+		_, cmd = m.Update(hk(k))
 	}
-	return msg
+	if cmd == nil {
+		return nil
+	}
+	return cmd()
 }
 
 func chosen(t *testing.T, m *paneBorderFormatsModel) paneBorderFormatsDoneMsg {
