@@ -590,12 +590,10 @@ func (m *appModel) doUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.screen == screenGroupHosts && m.gh != nil {
-			m.gh.toast = toast{text: fmt.Sprintf("removed %d", len(msg.hosts)), level: toastOK}
-		}
 		if m.screen == screenGroupHosts {
 			m.gh = newGroupHostsModel(m.opts, msg.groupIndex)
 			m.sizeOnOpen(m.gh, nil)
+			m.gh.toast = toast{text: fmt.Sprintf("removed %d", len(msg.hosts)), level: toastOK}
 		}
 		return m, nil
 	case hostFormCancelMsg:

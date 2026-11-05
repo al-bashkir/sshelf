@@ -237,6 +237,7 @@ func TestRouterGroupHosts(t *testing.T) {
 		if got := rowHosts(m.gh.l.Items()); !slices.Equal(got, []string{"db"}) {
 			t.Fatalf("group hosts shows %v, want [db]", got)
 		}
+		wantToast(t, "group hosts", m.gh.toast, "removed 1", toastOK)
 		wantSize(t, "group hosts", m.gh.width, m.gh.height, nil, 100, 30)
 	})
 	t.Run("a failed remove shows the error", func(t *testing.T) {
