@@ -15,10 +15,7 @@ func WindowName(host string) string {
 	if host == "" {
 		return "ssh"
 	}
-	if len(host) > 30 {
-		host = host[:30]
-	}
-	return host
+	return host[:min(len(host), 30)]
 }
 
 // GroupWindowName returns the window name for a set of hosts, preferring the group name when set.
