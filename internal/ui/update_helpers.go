@@ -23,6 +23,27 @@ func setFocus(focus *focusState, search *textinput.Model, to focusState) {
 }
 
 // handleFocusKeys handles the focus-switch keys shared by every list screen.
+// keyAction binds keys to what they do on a list screen.
+type keyAction struct {
+	keys   key.Binding
+	inList bool // only while the list, not the search box, has focus
+	run    func() tea.Cmd
+}
+
+// runKeyAction runs the first action whose keys match msg. ok is false when
+// none does.
+func runKeyAction(msg tea.KeyMsg, focus focusState, actions []keyAction) (cmd tea.Cmd, ok bool) {
+	for _, a := range actions {
+		if key.Matches(msg, a.keys) && (!a.inList || focus == focusList) {
+			return a.run(), true
+		}
+	}
+	return nil, false
+}
+
+// msgCmd returns a command that sends msg.
+func msgCmd(msg tea.Msg) tea.Cmd { return func() tea.Msg { return msg } }
+
 func handleFocusKeys(msg tea.KeyMsg, km keyMap, focus *focusState, search *textinput.Model) bool {
 	switch {
 	case key.Matches(msg, km.FocusSearch):
