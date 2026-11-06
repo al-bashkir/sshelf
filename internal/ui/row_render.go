@@ -132,7 +132,10 @@ func composeRow(width int, active bool, prefix, text, suffix string, suffixW int
 	}
 
 	if len(matched) > 0 {
-		visibleLen := len(text)
+		// Marks stop where the fade's dim style starts: an offset past it
+		// would land inside its escape code.
+		head, _, _ := strings.Cut(text, "\x1b")
+		visibleLen := len(head)
 		shown := make([]int, 0, len(matched))
 		for _, idx := range matched {
 			if idx >= 0 && idx < visibleLen {

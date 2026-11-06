@@ -249,6 +249,29 @@ func TestRowpColourMarksFuzzyLettersOfMultiByteNames(t *testing.T) {
 	}
 }
 
+// A match on a letter the fade cut or dimmed must not mark inside the
+// fade's escape code: that printed the code as text ("[90m") and made the
+// row too wide.
+func TestRowpColourMatchInTheFade(t *testing.T) {
+	if !rowpInColour(t) {
+		return
+	}
+	hl := checkedStyle.Render
+	rowpCheck(t, false, []rowpCase{
+		{"on the dim letter", composeRow(6, false, "  ", "alpha", "", 0, []int{2}, false), "  al" + dim.Render("p…")},
+		{"past the cut", composeRow(6, false, "  ", "alpha", "", 0, []int{1, 3, 4}, false), "  a" + hl("l") + dim.Render("p…")},
+	})
+	m := hostsScreen(func(o *Options) { o.Hosts = []string{"alpha-very-long-host-name", "beta-very-long-host-name"} })
+	m.Update(tea.WindowSizeMsg{Width: 24, Height: 20})
+	on(m, "/", "name")
+	rowpCheck(t, false, []rowpCase{{"faded screen row", rowpRow(t, m, "beta"), "  ◻ beta-very-long-ho…"}})
+	for _, l := range rowpLines(m) {
+		if w := lipgloss.Width(l); w > 24 {
+			t.Fatalf("line is %d cells, want <= 24: %q", w, l)
+		}
+	}
+}
+
 // TestRowpColour checks the style codes of the rows.
 func TestRowpColour(t *testing.T) {
 	if !rowpInColour(t) {
