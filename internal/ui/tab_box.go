@@ -120,24 +120,12 @@ func renderTabBox(width, height int, topLine string, headerLeft string, headerRi
 	}
 
 	innerW := max(0, width-2)
-	innerH := max(0, height-2)
-
-	fixed := tabBoxHeaderLines // top line + sep + header + sep
-	hasFooter := strings.TrimSpace(footer) != ""
-	var footerLines []string
-	if hasFooter {
-		footerLines = strings.Split(strings.TrimRight(footer, "\n"), "\n")
-		fixed += 1 + len(footerLines) // sep + N footer lines
-	}
-	if innerH < fixed {
+	foot := tabBoxFooter(width, innerW, textLines(footer))
+	// Rows left for content: less the borders, tabs, header and footer.
+	contentH := height - 2 - tabBoxHeaderLines - len(foot)
+	if contentH < 0 {
 		// Too short for the frame: a taller box would push its top out.
 		return boxTop(width)
-	}
-	contentH := max(0, innerH-fixed)
-
-	var contentLines []string
-	if content := strings.TrimRight(listView, "\n"); strings.TrimSpace(content) != "" {
-		contentLines = strings.Split(content, "\n")
 	}
 
 	out := make([]string, 0, height)
@@ -146,20 +134,44 @@ func renderTabBox(width, height int, topLine string, headerLeft string, headerRi
 	out = append(out, boxSep(width))
 	out = append(out, boxLine(width, padVisible(joinHeader(innerW, headerLeft, headerRight), innerW)))
 	out = append(out, boxSep(width))
+	out = append(out, tabBoxContent(width, innerW, contentH, textLines(listView))...)
+	out = append(out, foot...)
+	out = append(out, boxBottom(width))
+	return strings.Join(out, "\n")
+}
 
-	for i := 0; i < contentH; i++ {
+// textLines is the lines of s without its trailing newlines, or none when s
+// is blank.
+func textLines(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return strings.Split(strings.TrimRight(s, "\n"), "\n")
+}
+
+// tabBoxContent is the h content rows of the box: the lines, cut or padded
+// to innerW, then blank rows.
+func tabBoxContent(width, innerW, h int, lines []string) []string {
+	out := make([]string, 0, h)
+	for i := 0; i < h; i++ {
 		line := tabBoxPadStyle.Render(strings.Repeat(" ", innerW))
-		if i < len(contentLines) {
-			line = padVisible(contentLines[i], innerW)
+		if i < len(lines) {
+			line = padVisible(lines[i], innerW)
 		}
 		out = append(out, boxLine(width, line))
 	}
-	if hasFooter {
-		out = append(out, boxSep(width))
-		for _, fl := range footerLines {
-			out = append(out, boxLine(width, padVisible(fl, innerW)))
-		}
+	return out
+}
+
+// tabBoxFooter is a separator and the footer lines, or no rows when there
+// are no lines.
+func tabBoxFooter(width, innerW int, lines []string) []string {
+	if len(lines) == 0 {
+		return nil
 	}
-	out = append(out, boxBottom(width))
-	return strings.Join(out, "\n")
+	out := []string{boxSep(width)}
+	for _, l := range lines {
+		out = append(out, boxLine(width, padVisible(l, innerW)))
+	}
+	return out
 }
