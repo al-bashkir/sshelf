@@ -81,8 +81,8 @@ func TestHostsViewStatus(t *testing.T) {
 	m = hostsScreen(nil)
 	m.Update(toastMsg{text: "copied", level: toastInfo})
 	screenShows(t, m, []string{"copied"}, "3 hosts")
+	stylKeepSpinner(t)
 	spinnerStart()
-	defer spinnerStop()
 	screenShows(t, m, []string{"copied"}, "3 hosts")
 	m.toast = toast{}
 	screenShows(t, m, nil, "3 hosts", "copied")
