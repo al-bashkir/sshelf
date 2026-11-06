@@ -118,9 +118,6 @@ func renderTabBox(width, height int, topLine string, headerLeft string, headerRi
 		// Fallback before we know the window size.
 		return strings.TrimRight(topLine+"\n"+headerLeft+"\n"+listView, "\n")
 	}
-	if height < 3 {
-		return boxTop(width)
-	}
 
 	innerW := max(0, width-2)
 	innerH := max(0, height-2)
@@ -131,6 +128,10 @@ func renderTabBox(width, height int, topLine string, headerLeft string, headerRi
 	if hasFooter {
 		footerLines = strings.Split(strings.TrimRight(footer, "\n"), "\n")
 		fixed += 1 + len(footerLines) // sep + N footer lines
+	}
+	if innerH < fixed {
+		// Too short for the frame: a taller box would push its top out.
+		return boxTop(width)
 	}
 	contentH := max(0, innerH-fixed)
 

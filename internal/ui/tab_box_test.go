@@ -244,3 +244,33 @@ func TestTabbColour(t *testing.T) {
 		}
 	}
 }
+
+// The box is never taller than its window: the terminal would push its top
+// rows out. A window too short for the frame gets the top border only, as
+// a window of 1 or 2 rows did.
+func TestTabbFitsTheWindow(t *testing.T) {
+	screens := map[string]func() tea.Model{
+		"hosts":    func() tea.Model { return hostsScreen(nil) },
+		"groups":   func() tea.Model { return groupsScreen(nil) },
+		"settings": func() tea.Model { return newDefaultsFormModel(config.DefaultConfig().Defaults, false) },
+	}
+	for name, open := range screens {
+		for _, w := range []int{40, 100} {
+			for h := 1; h <= 12; h++ {
+				m := open()
+				m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+				if v := plainView(m); strings.Count(v, "\n")+1 > h {
+					t.Errorf("%s %dx%d: %d lines:\n%s", name, w, h, strings.Count(v, "\n")+1, v)
+				}
+			}
+		}
+	}
+	for _, c := range []struct {
+		h      int
+		footer string
+	}{{3, ""}, {5, ""}, {3, "F"}, {7, "F"}, {8, "F\nG"}} {
+		if got := renderTabBox(8, c.h, "T", "L", "R", "a", c.footer); got != "┌──────┐" {
+			t.Errorf("8x%d, footer %q:\n got:\n%s\nwant the top border only", c.h, c.footer, got)
+		}
+	}
+}
