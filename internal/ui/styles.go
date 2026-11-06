@@ -438,15 +438,7 @@ func withThemeBG(s string) string {
 
 func frameInnerSize(w, h int) (innerW, innerH int) {
 	// Frames have a 1-char border on each side + horizontal padding=1.
-	innerW = w - 2 - 2
-	innerH = h - 2
-	if innerW < 0 {
-		innerW = 0
-	}
-	if innerH < 0 {
-		innerH = 0
-	}
-	return innerW, innerH
+	return max(0, w-4), max(0, h-2)
 }
 
 // joinHeader lays out a header line width columns wide: left, then right
@@ -520,33 +512,22 @@ func setSearchBarFocused(m *textinput.Model, focused bool) {
 
 // styledFooter renders a footer string with keys in accent and actions dimmed.
 // Input format: "⏎ connect  ␣ select  o panes" (double-space separated hints).
+// Each hint is a key, one space and its action, or a lone "·" separator.
 func styledFooter(raw string) string {
 	lines := strings.Split(raw, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
+	for i, line := range lines {
 		parts := strings.Split(line, "  ")
-		styled := make([]string, 0, len(parts))
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p == "" {
-				continue
-			}
+		for j, p := range parts {
 			if p == "·" {
-				styled = append(styled, hintStyle.Render("·"))
+				parts[j] = hintStyle.Render(p)
 				continue
 			}
-			idx := strings.IndexByte(p, ' ')
-			if idx < 0 {
-				styled = append(styled, footerKeyStyle.Render(p))
-				continue
-			}
-			k := p[:idx]
-			a := p[idx:] // includes leading space
-			styled = append(styled, footerKeyStyle.Render(k)+hintStyle.Render(a))
+			k, a, _ := strings.Cut(p, " ")
+			parts[j] = footerKeyStyle.Render(k) + hintStyle.Render(" "+a)
 		}
-		out = append(out, strings.Join(styled, "  "))
+		lines[i] = strings.Join(parts, "  ")
 	}
-	return strings.Join(out, "\n")
+	return strings.Join(lines, "\n")
 }
 
 // Spinner for loading states.
@@ -588,35 +569,15 @@ func spinnerFrame() string {
 // formScrollWindow returns the slice of lines to display, scrolled so that
 // focusLine is visible within visibleH lines. Returns (start, end) indices.
 func formScrollWindow(totalLines, visibleH, focusLine int) (int, int) {
-	if totalLines <= visibleH {
-		return 0, totalLines
-	}
-	// Center focused line in the window.
-	start := focusLine - visibleH/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + visibleH
-	if end > totalLines {
-		end = totalLines
-		start = end - visibleH
-		if start < 0 {
-			start = 0
-		}
-	}
-	return start, end
+	// Center the focused line, but keep the window inside the lines.
+	start := max(0, min(focusLine-visibleH/2, totalLines-visibleH))
+	return start, min(totalLines, start+visibleH)
 }
 
 // formSection renders a lightweight section divider: "── Label ──────"
 func formSection(label string, width int) string {
-	label = strings.TrimSpace(label)
-	seg := "── " + label + " "
-	segW := lipgloss.Width(seg)
-	fill := width - segW
-	if fill < 0 {
-		fill = 0
-	}
-	return secondaryStyle.Render(seg + strings.Repeat("─", fill))
+	seg := "── " + strings.TrimSpace(label) + " "
+	return secondaryStyle.Render(seg + strings.Repeat("─", max(0, width-lipgloss.Width(seg))))
 }
 
 // statusDot returns a colored dot for status display.
