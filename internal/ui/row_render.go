@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // highlightMatches renders matched character positions in accent style.
@@ -58,26 +59,15 @@ func highlightMatches(s string, positions []int, active bool) string {
 	return sb.String()
 }
 
+// truncateTail cuts s to max cells and ends it with "…". It counts cells,
+// so wide letters and emoji fit too.
 func truncateTail(s string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	if lipgloss.Width(s) <= max {
-		return s
-	}
-	if max == 1 {
-		return "…"
-	}
-
-	r := []rune(s)
-	if len(r) <= max {
-		return string(r)
-	}
-	return string(r[:max-1]) + "…"
+	return ansi.Truncate(s, max, "…")
 }
 
 // truncateFade truncates with a soft fade: the last visible character and
-// the ellipsis are rendered in dim gray instead of a hard cut.
+// the ellipsis are rendered in dim gray instead of a hard cut. s must be
+// plain text: the cut takes a byte prefix of it.
 func truncateFade(s string, max int) string {
 	if max <= 0 {
 		return ""
@@ -89,16 +79,10 @@ func truncateFade(s string, max int) string {
 		return dim.Render("…") + strings.Repeat(" ", max-1)
 	}
 
-	r := []rune(s)
-	cutoff := max - 2
-	if cutoff > len(r) {
-		cutoff = len(r)
-	}
-	normal := string(r[:cutoff])
-	dimChar := ""
-	if cutoff < len(r) {
-		dimChar = string(r[cutoff : cutoff+1])
-	}
+	normal := ansi.Truncate(s, max-2, "")
+	// The dim letter gets the cells left before "…": one, or two when a
+	// wide letter did not fit in normal.
+	dimChar := ansi.Truncate(s[len(normal):], max-1-lipgloss.Width(normal), "")
 	return normal + dim.Render(dimChar+"…")
 }
 

@@ -72,6 +72,31 @@ func TestRowpTruncateFade(t *testing.T) {
 	})
 }
 
+// Wide letters (CJK, emoji) take two cells, so a cut counts cells, not
+// runes, and keeps an emoji made of several runes whole.
+func TestRowpCutsWideLettersByWidth(t *testing.T) {
+	rowpCheck(t, true, []rowpCase{
+		{"tail fits by runes, not cells", truncateTail("日本語", 4), "日…"},
+		{"tail", truncateTail("日本語日本", 5), "日本…"},
+		{"tail keeps an emoji whole", truncateTail("ab👨‍👩‍👧cd", 4), "ab…"},
+		{"fade", truncateFade("日本語のホスト", 7), "日本語…"},
+		{"fade fits by runes, not cells", truncateFade("日本語", 5), "日本…"},
+		{"fade on a wide letter", truncateFade("a日本", 4), "a日…"},
+		{"fade drops a wide letter that does not fit", truncateFade("ab日本", 4), "ab…"},
+		{"fade keeps an emoji whole", truncateFade("ab👨‍👩‍👧cd", 5), "ab👨‍👩‍👧…"},
+	})
+	g := groupsScreen(func(o *Options) {
+		o.Inventory.Groups = append(o.Inventory.Groups, config.Group{Name: "日本語のグループの名前"})
+	})
+	g.Update(tea.WindowSizeMsg{Width: 24, Height: 20})
+	rowpCheck(t, false, []rowpCase{{"screen row", rowpRow(t, g, "日本"), "  日本語のグルー…  0"}})
+	for _, l := range rowpLines(g) {
+		if w := lipgloss.Width(l); w > 24 {
+			t.Fatalf("line is %d cells, want <= 24: %q", w, l)
+		}
+	}
+}
+
 func TestRowpComposeRow(t *testing.T) {
 	row := func(width int, active bool, prefix, suffix string, suffixW int) string {
 		return composeRow(width, active, prefix, "alpha", suffix, suffixW, nil, false)
