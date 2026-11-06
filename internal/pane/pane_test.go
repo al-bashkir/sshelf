@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -179,6 +180,54 @@ func TestReadKeyFromPipe(t *testing.T) {
 	}
 	if k, err := readKey(); k != 0 || err != io.EOF {
 		t.Fatalf("readKey at end=%q,%v want 0,EOF", k, err)
+	}
+}
+
+// fakeTmux puts a tmux stand-in first in PATH. It records each call's argv
+// (one arg per line, then "--call--") in the returned file.
+func fakeTmux(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" --call-- >> '" + log + "'\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o700); err != nil { // #nosec G306 -- test stub must be executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+func TestMainLostConnectionTakesPaneOutOfSync(t *testing.T) {
+	off := "set-option\n-p\n-t\n%7\nsynchronize-panes\noff\n--call--\n"
+	back := "set-option\n-p\n-u\n-t\n%7\nsynchronize-panes\n--call--\n"
+	for _, tc := range []struct{ pane, want string }{
+		{"%7", off + back + off},
+		{"", ""}, // not in a tmux pane: tmux is never run
+	} {
+		t.Run("pane="+tc.pane, func(t *testing.T) {
+			log := fakeTmux(t)
+			t.Setenv("TMUX_PANE", tc.pane)
+			pipeStdin(t, "r") // reconnect once, then the input ends: close
+			out, err := os.Create(filepath.Join(t.TempDir(), "out"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			old := os.Stdout
+			os.Stdout = out
+			t.Cleanup(func() { os.Stdout = old; _ = out.Close() })
+
+			if got := Main([]string{"web01", "--", "sh", "-c", "exit 255"}); got != 255 {
+				t.Fatalf("Main=%d want=255", got)
+			}
+			calls, _ := os.ReadFile(log) // no file: no calls
+			if string(calls) != tc.want {
+				t.Fatalf("tmux calls=%q want=%q", calls, tc.want)
+			}
+			printed, _ := os.ReadFile(out.Name())
+			if n := strings.Count(string(printed), "Connection to web01 lost"); n != 2 {
+				t.Fatalf("prompt shown %d times, want 2: %q", n, printed)
+			}
+		})
 	}
 }
 
