@@ -170,14 +170,8 @@ func applySettingsValues(values map[string]string, base config.Defaults) (config
 	d.IdentityFile = strings.TrimSpace(values["identity"])
 
 	// Colorscheme / accent.
-	d.Colorscheme = strings.ToLower(strings.TrimSpace(values["colorscheme"]))
-	if d.Colorscheme == "default" {
-		d.Colorscheme = ""
-	}
-	d.AccentColor = strings.ToLower(strings.TrimSpace(values["accent"]))
-	if d.AccentColor == "default" {
-		d.AccentColor = ""
-	}
+	d.Colorscheme = themeValue(values["colorscheme"])
+	d.AccentColor = themeValue(values["accent"])
 
 	d.LoadKnownHosts = values["load_known_hosts"] != "no"
 	d.ConfirmQuit = values["confirm_quit"] == "yes"
@@ -224,6 +218,35 @@ func applySettingsValues(values map[string]string, base config.Defaults) (config
 
 	d.PaneBorderFmts = cleanBorderFormats(d.PaneBorderFmts)
 	return d, nil
+}
+
+// themeChoice is a colorscheme and an accent as config.Defaults stores them.
+type themeChoice struct{ scheme, accent string }
+
+func savedTheme(d config.Defaults) themeChoice {
+	return themeChoice{scheme: d.Colorscheme, accent: d.AccentColor}
+}
+
+// themeValue is a colorscheme or accent choice as the config stores it:
+// lower case, and "" for "default".
+func themeValue(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "default" {
+		return ""
+	}
+	return s
+}
+
+// previewTheme is the theme Settings shows: the form's choice, or the
+// option under the cursor while that field's picker is open.
+func (m *defaultsFormModel) previewTheme() themeChoice {
+	pick := func(key string) string {
+		if p := m.form.picker; p != nil && p.fieldKey == key {
+			return themeValue(p.selected())
+		}
+		return themeValue(m.form.value(key))
+	}
+	return themeChoice{scheme: pick("colorscheme"), accent: pick("accent")}
 }
 
 // parseThreshold parses the connect-confirm threshold; empty means 5.

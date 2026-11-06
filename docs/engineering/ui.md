@@ -103,6 +103,7 @@ screenGroupHosts -- Esc --> screenGroups
 Notes:
 
 - `screenDefaultsForm` is rendered as the Settings tab content (not a centered modal).
+- The app applies the theme in one place, `appModel.syncTheme`, after every message: the Settings preview while Settings is on screen, the saved theme on every other screen.
 - Most other "forms/pickers" are centered via `placeCentered()`.
 
 ## Messages and return-to pattern

@@ -38,7 +38,6 @@ type exitState interface {
 // Run shows the TUI on the real terminal. Its result comes from exitResult.
 func Run(opts Options) error {
 	opts = withDefaultKnownHosts(opts)
-	ApplyColorScheme(opts.Config.Defaults.Colorscheme, opts.Config.Defaults.AccentColor)
 	return exitResult(tea.NewProgram(newAppModel(opts), tea.WithAltScreen()).Run())
 }
 

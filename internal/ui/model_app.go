@@ -146,6 +146,7 @@ type appModel struct {
 	hostFormReturnTo   screen
 	defaultsToastToken int
 	toastToken         int
+	theme              themeChoice // the colorscheme and accent on screen
 
 	quitting bool
 	execCmd  []string
@@ -158,6 +159,7 @@ func newAppModel(opts Options) *appModel {
 		hosts:  newHostsModel(opts),
 		groups: newGroupsModel(opts),
 	}
+	m.showTheme(savedTheme(opts.Config.Defaults))
 	return m
 }
 
@@ -307,6 +309,7 @@ func (m *appModel) breadcrumb() string {
 func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	prev := m.collectToastKey()
 	result, cmd := m.doUpdate(msg)
+	m.syncTheme()
 	if cur := m.collectToastKey(); cur != "" && cur != prev {
 		return result, tea.Batch(cmd, m.toastTimer())
 	}
@@ -474,8 +477,6 @@ func (m *appModel) saveDefaults(d config.Defaults) error {
 	}
 	toggled := d.LoadKnownHosts != m.opts.Config.Defaults.LoadKnownHosts
 	m.opts.Config = cfg
-	ApplyColorScheme(d.Colorscheme, d.AccentColor)
-	m.refreshAccentStyles()
 	if toggled {
 		m.reloadHostSource()
 	}
@@ -504,6 +505,25 @@ func (m *appModel) reloadHostSource() {
 	m.hosts.keymap.Reload.SetEnabled(on)
 	m.hosts.opts = m.opts
 	_, _ = m.hosts.Update(knownHostsReloadMsg{res: hosts.LoadResult{Hosts: m.opts.Hosts, SkippedLines: m.opts.SkippedLines}, errs: m.opts.LoadErrors})
+}
+
+// syncTheme shows the theme Settings previews while Settings is on screen,
+// and the saved theme everywhere else.
+func (m *appModel) syncTheme() {
+	want := savedTheme(m.opts.Config.Defaults)
+	if m.screen == screenDefaultsForm && m.defaultsForm != nil {
+		want = m.defaultsForm.previewTheme()
+	}
+	if want != m.theme {
+		m.showTheme(want)
+	}
+}
+
+// showTheme applies t and restyles every open screen.
+func (m *appModel) showTheme(t themeChoice) {
+	m.theme = t
+	ApplyColorScheme(t.scheme, t.accent)
+	m.refreshAccentStyles()
 }
 
 // refreshAccentStyles restyles every open screen after the accent changed.

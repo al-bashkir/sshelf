@@ -537,6 +537,7 @@ func TestRouterDefaultsForm(t *testing.T) {
 		old := cAccent
 		d := m.opts.Config.Defaults
 		d.AccentColor = "#ff0000"
+		m.defaultsForm.form.setValue("accent", d.AccentColor) // Settings shows the theme its form holds
 		m.Update(defaultsFormSaveMsg{defaults: d})
 		if cAccent == old {
 			t.Fatal("accent did not change")
@@ -571,6 +572,73 @@ func TestRouterDefaultsForm(t *testing.T) {
 		if m.opts.Config.Defaults.ConnectConfirmThreshold == 9 {
 			t.Fatal("app took the defaults that failed to save")
 		}
+	})
+}
+
+func TestRouterSettingsPreviewTheTheme(t *testing.T) {
+	t.Cleanup(func() { ApplyColorScheme("", "") })
+	wantAccent := func(t *testing.T, what, scheme string) {
+		t.Helper()
+		if want := builtinColorSchemes[scheme].Accent; cAccent != want {
+			t.Fatalf("%s: accent %v, want the %s accent %v", what, cAccent, scheme, want)
+		}
+	}
+	// open shows Settings with the colorscheme picker open on "default".
+	open := func(t *testing.T) *appModel {
+		t.Helper()
+		m := routerApp(t)
+		m.Update(openDefaultsFormMsg{returnTo: screenHosts})
+		for i := 0; m.defaultsForm.form.focusedFieldKey() != "colorscheme"; i++ {
+			if i > 20 {
+				t.Fatal("no colorscheme field")
+			}
+			m.Update(hk("j"))
+		}
+		m.Update(hk("enter"))
+		return m
+	}
+	t.Run("the app starts with the saved theme", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Defaults.Colorscheme = "nord"
+		newAppModel(Options{Config: cfg})
+		wantAccent(t, "at start", "nord")
+	})
+	t.Run("the picker cursor shows its theme", func(t *testing.T) {
+		m := open(t)
+		m.Update(hk("j"))
+		wantAccent(t, "on dracula", "dracula")
+		m.Update(hk("j"))
+		wantAccent(t, "on nord", "nord")
+	})
+	t.Run("esc in the picker shows the saved theme again", func(t *testing.T) {
+		m := open(t)
+		m.Update(hk("j"))
+		m.Update(hk("esc"))
+		wantAccent(t, "after esc", "default")
+	})
+	t.Run("a picked theme stays until settings close unsaved", func(t *testing.T) {
+		m := open(t)
+		m.Update(hk("j"))
+		m.Update(hk("enter"))
+		wantAccent(t, "picked", "dracula")
+		m.Update(defaultsFormCancelMsg{})
+		wantAccent(t, "after cancel", "default")
+	})
+	t.Run("a tab switch shows the saved theme", func(t *testing.T) {
+		m := open(t)
+		m.Update(hk("j"))
+		m.Update(hk("enter"))
+		m.Update(switchScreenMsg{to: screenGroups})
+		wantAccent(t, "on groups", "default")
+	})
+	t.Run("a saved theme stays", func(t *testing.T) {
+		m := open(t)
+		m.Update(hk("j"))
+		m.Update(hk("enter"))
+		_, cmd := m.Update(hk("ctrl+s"))
+		m.Update(cmd())
+		m.Update(defaultsFormCancelMsg{})
+		wantAccent(t, "after save and close", "dracula")
 	})
 }
 

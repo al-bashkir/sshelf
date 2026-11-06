@@ -7,7 +7,7 @@ Screens:
 - Hosts: list of hosts + fuzzy search + multi-select.
 - Groups: list of groups + CRUD.
 - Group Hosts: hosts inside a group.
-- Settings: defaults editor.
+- Settings: defaults editor. The colorscheme and accent pickers preview the theme under the cursor; `Esc`, or leaving Settings without a save, shows the saved theme again.
 
 Rendering rules:
 
