@@ -2,6 +2,8 @@ package ui
 
 import (
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ---------------------------------------------------------------------------
@@ -40,95 +42,88 @@ func (m *formModel) renderFormContent(innerW int) ([]string, int) {
 // Field rendering
 // ---------------------------------------------------------------------------
 
-// renderFieldLines renders a single field as one or more lines.
-// The focused field gets a helper text line appended.
+// renderFieldLines renders a single field as one or more lines: the field
+// row, then the reason it is disabled, or under the focused field its
+// error or help text.
 func (m *formModel) renderFieldLines(fd *fieldDef, focused bool, fieldW int) []string {
-	var lines []string
-
-	// Check disabled state.
-	disabledReason := m.isFieldDisabled(fd)
-	disabled := disabledReason != ""
-
-	// Disabled fields cannot be focused (navigation skips them),
-	// but guard defensively.
-	if disabled {
-		focused = false
+	if reason := m.isFieldDisabled(fd); reason != "" {
+		return m.disabledFieldLines(fd, reason)
 	}
-
-	dirty := m.originals[fd.Key] != m.values[fd.Key]
-
-	indent := strings.Repeat(" ", m.fieldIndent)
-	prefix := indent
-	if focused {
-		// Replace indent with focus indicator.
-		if m.fieldIndent >= 2 {
-			prefix = "> "
-			if m.fieldIndent > 2 {
-				prefix = strings.Repeat(" ", m.fieldIndent-2) + "> "
-			}
-		} else {
-			prefix = ">"
-		}
-	} else if dirty && m.fieldIndent >= 1 {
-		// Show modified indicator on unfocused dirty fields.
-		prefix = statusWarn.Render("•") + strings.Repeat(" ", m.fieldIndent-1)
+	lines := []string{m.fieldPrefix(fd, focused) + formLabel(fd.Label+":", m.labelWidth, focused) + " " + m.fieldValue(fd, focused, fieldW)}
+	if note := m.fieldNote(fd, focused); note != "" {
+		lines = append(lines, note)
 	}
-
-	// Disabled fields: render label + value entirely in disabledStyle.
-	if disabled {
-		labelStr := disabledStyle.Render(padVisible(fd.Label+":", m.labelWidth))
-		val := strings.TrimSpace(m.values[fd.Key])
-		if val == "" {
-			val = "default"
-		}
-		lines = append(lines, prefix+labelStr+" "+disabledStyle.Render(val))
-		// Show disable reason below.
-		helperPrefix := strings.Repeat(" ", m.fieldIndent)
-		lines = append(lines, disabledStyle.Render(helperPrefix+"╰ "+disabledReason))
-		return lines
-	}
-
-	labelStr := formLabel(fd.Label+":", m.labelWidth, focused)
-
-	switch fd.Kind {
-	case fieldText, fieldNumber:
-		w := fieldW
-		if fd.Narrow {
-			w = min(12, fieldW)
-		}
-		// newFormModel makes an input for every text and number field.
-		lines = append(lines, prefix+labelStr+" "+underlineInput(*m.input(fd.Key), w))
-
-	case fieldPicker:
-		cur := strings.TrimSpace(m.values[fd.Key])
-		lines = append(lines, prefix+labelStr+" "+renderPickerInline(fd.Options, cur, focused, fieldW))
-
-	case fieldSubModal:
-		val := strings.TrimSpace(m.values[fd.Key])
-		displayVal := val
-		if displayVal == "" {
-			displayVal = "default"
-		}
-		rendered := padVisible(displayVal, fieldW)
-		if focused {
-			rendered = checkedStyle.Render(rendered)
-		} else {
-			rendered = dim.Render(rendered)
-		}
-		lines = append(lines, prefix+labelStr+" "+rendered)
-	}
-
-	// Validation error or helper text below focused field.
-	if focused {
-		helperPrefix := strings.Repeat(" ", m.fieldIndent)
-		if errMsg := m.validationErrs[fd.Key]; errMsg != "" {
-			lines = append(lines, statusErr.Render(helperPrefix+"╰ "+errMsg))
-		} else if fd.Helper != "" && m.showFieldHelp {
-			lines = append(lines, hintStyle.Render(helperPrefix+"╰ "+fd.Helper))
-		}
-	}
-
 	return lines
+}
+
+// fieldPrefix is the indent before a field's label: "> " ends it on the
+// focused field, "•" starts it on a changed one. newFormModel sets the
+// indent to 2, so both marks fit.
+func (m *formModel) fieldPrefix(fd *fieldDef, focused bool) string {
+	switch {
+	case focused:
+		return strings.Repeat(" ", m.fieldIndent-2) + "> "
+	case m.originals[fd.Key] != m.values[fd.Key]:
+		return statusWarn.Render("•") + strings.Repeat(" ", m.fieldIndent-1)
+	}
+	return strings.Repeat(" ", m.fieldIndent)
+}
+
+// disabledFieldLines renders a disabled field and the reason below it, all
+// in disabledStyle. Navigation skips disabled fields, so one that turns
+// disabled under the focus draws as unfocused.
+func (m *formModel) disabledFieldLines(fd *fieldDef, reason string) []string {
+	label := disabledStyle.Render(padVisible(fd.Label+":", m.labelWidth))
+	return []string{
+		m.fieldPrefix(fd, false) + label + " " + disabledStyle.Render(valueOrDefault(m.values[fd.Key])),
+		m.noteLine(disabledStyle, reason),
+	}
+}
+
+// fieldValue renders the value column of an enabled field.
+func (m *formModel) fieldValue(fd *fieldDef, focused bool, fieldW int) string {
+	switch fd.Kind {
+	case fieldPicker:
+		return renderPickerInline(fd.Options, strings.TrimSpace(m.values[fd.Key]), focused, fieldW)
+	case fieldSubModal:
+		style := dim
+		if focused {
+			style = checkedStyle
+		}
+		return style.Render(padVisible(valueOrDefault(m.values[fd.Key]), fieldW))
+	}
+	if fd.Narrow {
+		fieldW = min(12, fieldW)
+	}
+	// newFormModel makes an input for every text and number field.
+	return underlineInput(*m.input(fd.Key), fieldW)
+}
+
+// fieldNote is the line under the focused field: its validation error,
+// else its help text when field help is on; "" when there is none.
+func (m *formModel) fieldNote(fd *fieldDef, focused bool) string {
+	switch {
+	case !focused:
+		return ""
+	case m.validationErrs[fd.Key] != "":
+		return m.noteLine(statusErr, m.validationErrs[fd.Key])
+	case fd.Helper != "" && m.showFieldHelp:
+		return m.noteLine(hintStyle, fd.Helper)
+	}
+	return ""
+}
+
+// noteLine renders text as a "╰ " line under a field.
+func (m *formModel) noteLine(style lipgloss.Style, text string) string {
+	return style.Render(strings.Repeat(" ", m.fieldIndent) + "╰ " + text)
+}
+
+// valueOrDefault trims a field value and shows an empty one as "default".
+func valueOrDefault(v string) string {
+	if v = strings.TrimSpace(v); v == "" {
+		return "default"
+	}
+	return v
 }
 
 // ---------------------------------------------------------------------------
