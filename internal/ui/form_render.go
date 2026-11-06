@@ -92,16 +92,12 @@ func (m *formModel) renderFieldLines(fd *fieldDef, focused bool, fieldW int) []s
 
 	switch fd.Kind {
 	case fieldText, fieldNumber:
-		in := m.input(fd.Key)
 		w := fieldW
 		if fd.Narrow {
 			w = min(12, fieldW)
 		}
-		if in != nil {
-			lines = append(lines, prefix+labelStr+" "+underlineInput(*in, w))
-		} else {
-			lines = append(lines, prefix+labelStr+" "+underlineText(m.values[fd.Key], focused, w))
-		}
+		// newFormModel makes an input for every text and number field.
+		lines = append(lines, prefix+labelStr+" "+underlineInput(*m.input(fd.Key), w))
 
 	case fieldPicker:
 		cur := strings.TrimSpace(m.values[fd.Key])
