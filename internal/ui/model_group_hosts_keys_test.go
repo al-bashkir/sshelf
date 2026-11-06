@@ -309,3 +309,12 @@ func TestGroupHostsOutOfRangeIndexIsEmpty(t *testing.T) {
 		}
 	}
 }
+
+// hosts.toml can hold a blank group host; its row cannot be selected.
+func TestGroupHostsBlankHostCannotBeSelected(t *testing.T) {
+	m := groupHostsScreen(0, func(o *Options) { o.Inventory.Groups[0].Hosts = []string{"", "beta"} })
+	on(m, "space")
+	if got := m.selectedHosts(); len(got) != 0 || m.currentHost() != "" {
+		t.Fatalf("space on the blank row: on %q selected %q, want nothing selected", m.currentHost(), got)
+	}
+}

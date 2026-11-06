@@ -78,3 +78,20 @@ func TestApplySettingsValuesErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultsToValuesLeavesUnsetNumbersBlank(t *testing.T) {
+	for _, c := range []struct {
+		port, threshold     int
+		wantPort, wantThres string
+	}{
+		{0, -1, "", ""}, // unset: the form shows the default placeholders
+		{1, 0, "1", "0"},
+		{2222, 7, "2222", "7"},
+	} {
+		v := defaultsToValues(config.Defaults{Port: c.port, ConnectConfirmThreshold: c.threshold})
+		if v["port"] != c.wantPort || v["threshold"] != c.wantThres {
+			t.Errorf("port %d threshold %d: got %q and %q, want %q and %q",
+				c.port, c.threshold, v["port"], v["threshold"], c.wantPort, c.wantThres)
+		}
+	}
+}

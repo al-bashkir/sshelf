@@ -19,20 +19,33 @@ func shownHosts(m *hostsModel) []string {
 	return out
 }
 
-func TestSaveGroupFailureLeavesInventoryUnchanged(t *testing.T) {
-	// A regular file where the config dir should be makes every save fail.
+// failingSaves opens the app on inv with an inventory path that every save
+// fails on: a regular file sits where the config dir should be.
+func failingSaves(t *testing.T, inv config.Inventory) *appModel {
 	blocker := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	inv := config.Inventory{Groups: []config.Group{{Name: "prod", User: "old"}}}
-	m := newAppModel(Options{InventoryPath: filepath.Join(blocker, "hosts.toml"), Inventory: inv})
+	return newAppModel(Options{InventoryPath: filepath.Join(blocker, "hosts.toml"), Inventory: inv})
+}
 
+func TestSaveGroupFailureLeavesInventoryUnchanged(t *testing.T) {
+	m := failingSaves(t, config.Inventory{Groups: []config.Group{{Name: "prod", User: "old"}}})
 	if err := m.saveGroup(0, config.Group{Name: "prod", User: "new"}); err == nil {
 		t.Fatal("save into a path under a regular file succeeded")
 	}
 	if got := m.opts.Inventory.Groups[0].User; got != "old" {
 		t.Fatalf("after failed save, group user=%q, want old", got)
+	}
+}
+
+func TestAddHostsToGroupFailureLeavesInventoryUnchanged(t *testing.T) {
+	m := failingSaves(t, config.Inventory{Groups: []config.Group{{Name: "prod"}}})
+	if _, err := m.addHostsToGroup(0, []string{"x"}); err == nil {
+		t.Fatal("add with a failing save succeeded")
+	}
+	if got := m.opts.Inventory.Groups[0].Hosts; len(got) != 0 {
+		t.Fatalf("after failed add, group hosts=%v, want none", got)
 	}
 }
 

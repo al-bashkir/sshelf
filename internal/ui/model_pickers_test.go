@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -370,4 +371,26 @@ func TestGroupPickerAddingLinesAtTheLimits(t *testing.T) {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
+}
+
+func TestPickerStatusLine(t *testing.T) {
+	screenShows(t, hostPicker(), []string{"sel:0  search"}, "pg:", "search:")
+
+	hs := make([]string, 30)
+	for i := range hs {
+		hs[i] = fmt.Sprintf("h%02d", i)
+	}
+	m := newHostPickerModel(Options{Config: config.DefaultConfig(), Hosts: hs})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
+	screenShows(t, m, []string{"pg:1/"})
+	m.toast = toast{text: "boom", level: toastErr}
+	screenShows(t, m, []string{"boom"})
+
+	sendKeys(m, "/", "h", "0")
+	screenShows(t, m, []string{"search: h0"})
+	x38 := strings.Repeat("x", 38)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(x38)})
+	screenShows(t, m, []string{"search: h0" + x38 + "  "}, x38+"...") // 40 characters fit
+	sendKeys(m, "x")
+	screenShows(t, m, []string{"search: h0" + x38 + "..."})
 }

@@ -238,3 +238,38 @@ func questionCentered(t *testing.T, m tea.Model, title string, offset int) {
 		t.Fatalf("%q box is off the middle by %d columns:\n%s", title, d, plainView(m))
 	}
 }
+
+func TestEmptyListMessageIsCentered(t *testing.T) {
+	lines := strings.Split(plainView(hostsScreen(func(o *Options) { o.Hosts = nil })), "\n")
+	has := func(s string) func(string) bool { return func(l string) bool { return strings.Contains(l, s) } }
+	dots := slices.IndexFunc(lines, has("·  ·  ·"))
+	last := slices.IndexFunc(lines, has("open settings"))
+	top := 4                 // the rule under the search box
+	bottom := len(lines) - 4 // the rule over the footer
+	if above, below := dots-top-1, bottom-last-1; above != below {
+		t.Fatalf("%d rows above the message, %d below:\n%s", above, below, strings.Join(lines, "\n"))
+	}
+	row := []rune(lines[dots])
+	left := slices.Index(row, '·') - 1
+	right := len(row) - 1 - (slices.Index(row, '·') + len([]rune("·  ·  ·")))
+	if left != 45 || right != 46 { // 98 columns less 7
+		t.Fatalf("dots at %d columns from the left, %d from the right, want 45 and 46", left, right)
+	}
+}
+
+func TestGroupsRowsSitOnConsecutiveLines(t *testing.T) {
+	m := groupsScreen(func(o *Options) {
+		o.Inventory.Groups = []config.Group{{Name: "web"}, {Name: "Web"}, {Name: "db"}}
+	})
+	lines := strings.Split(plainView(m), "\n")
+	row := func(name string) int {
+		return slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, " "+name+" ") })
+	}
+	// Sorted without case; equal names keep the inventory order.
+	if db, web, Web := row("db"), row("web"), row("Web"); web != db+1 || Web != web+1 {
+		t.Fatalf("rows db %d, web %d, Web %d, want consecutive in that order:\n%s", db, web, Web, plainView(m))
+	}
+	if !strings.Contains(lines[row("db")], "▸ db") || strings.Contains(lines[row("web")], "▸") {
+		t.Fatalf("the cursor is not on db alone:\n%s", plainView(m))
+	}
+}

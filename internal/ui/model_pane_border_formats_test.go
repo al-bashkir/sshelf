@@ -274,3 +274,11 @@ func TestBorderFormatsReadOnly(t *testing.T) {
 		t.Fatalf("chose %q, want #A", got.value)
 	}
 }
+
+func TestBorderFormatsAddInputFitsTheModal(t *testing.T) {
+	m := borderModel(false, true, "#A")
+	keys(m, "a")
+	if m.addInput.Width != 71 { // 80 less borders, padding and "fmt: "
+		t.Fatalf("add input %d wide, want 71", m.addInput.Width)
+	}
+}

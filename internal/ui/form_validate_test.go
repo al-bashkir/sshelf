@@ -12,3 +12,14 @@ func TestValidatePort(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateNonNegativeInt(t *testing.T) {
+	for in, ok := range map[string]bool{
+		"": true, "  ": true, "0": true, " 7 ": true,
+		"-1": false, "x": false, "1.5": false,
+	} {
+		if err := validateNonNegativeInt(in); (err == nil) != ok {
+			t.Errorf("validateNonNegativeInt(%q) err=%v, want ok=%v", in, err, ok)
+		}
+	}
+}
