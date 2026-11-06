@@ -74,7 +74,7 @@ Key bindings:
 | `O` | Open a single host in the current pane |
 | `C` | Connect all hosts in the selected group (Groups screen) |
 | `Ctrl+O` | Connect with custom remote command |
-| `c` | Connect a custom host |
+| `c` | Connect a custom host (`Ctrl+G` in the popup adds it to a group) |
 | `a` | Add current/selected hosts to a group, or add hosts to the selected group |
 | `Ctrl+H` | Hide / unhide the current host |
 | `H` | Show / hide hidden hosts |

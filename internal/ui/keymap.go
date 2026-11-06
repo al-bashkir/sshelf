@@ -27,6 +27,7 @@ type keyMap struct {
 	EditGroup   key.Binding
 	DeleteGroup key.Binding
 	AddHosts    key.Binding
+	AddToGroup  key.Binding
 	Copy        key.Binding
 	HideHost    key.Binding
 	ShowHidden  key.Binding
@@ -129,6 +130,10 @@ func defaultKeyMap() keyMap {
 		AddHosts: key.NewBinding(
 			key.WithKeys("a", "A"),
 			key.WithHelp("a", "add hosts to group"),
+		),
+		AddToGroup: key.NewBinding(
+			key.WithKeys("ctrl+g"),
+			key.WithHelp("ctrl+g", "add to group"),
 		),
 		Copy: key.NewBinding(
 			key.WithKeys("y"),

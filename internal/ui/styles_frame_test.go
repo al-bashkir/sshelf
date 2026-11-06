@@ -64,7 +64,7 @@ func TestStylFocusedFrameLayout(t *testing.T) {
 // Before a modal knows its size it draws its lines without a frame.
 func TestStylModalBeforeItsSize(t *testing.T) {
 	m := newCustomHostModel(0, screenGroups)
-	want := "Connect\n" + ansi.Strip(m.input.View()) + "\n⏎ connect  Ctrl+a add to group  Esc cancel"
+	want := "Connect\n" + ansi.Strip(m.input.View()) + "\n⏎ connect  Ctrl+g add to group  Esc cancel"
 	if got := plainView(m); got != want {
 		t.Fatalf("no size:\n got %q\nwant %q", got, want)
 	}

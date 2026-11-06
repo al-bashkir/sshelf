@@ -37,13 +37,13 @@ func TestCustomHostKeys(t *testing.T) {
 		{"enter without a group", -1, "a", "enter",
 			customHostConnectMsg{returnTo: screenGroups, groupIndex: -1, hosts: []string{"a"}}},
 		{"enter needs a host", 0, "  ", "enter", nil},
-		{"ctrl+a adds to the group", 1, "a b", "ctrl+a",
+		{"ctrl+g adds to the group", 1, "a b", "ctrl+g",
 			customHostDoneMsg{returnTo: screenGroups, groupIndex: 1, hosts: []string{"a", "b"}}},
-		{"ctrl+a adds to group 0", 0, "a", "ctrl+a",
+		{"ctrl+g adds to group 0", 0, "a", "ctrl+g",
 			customHostDoneMsg{returnTo: screenGroups, groupIndex: 0, hosts: []string{"a"}}},
-		{"ctrl+a without a group picks one", -1, "a", "ctrl+a",
+		{"ctrl+g without a group picks one", -1, "a", "ctrl+g",
 			customHostPickGroupMsg{returnTo: screenGroups, hosts: []string{"a"}}},
-		{"ctrl+a needs a host", -1, " ", "ctrl+a", nil},
+		{"ctrl+g needs a host", -1, " ", "ctrl+g", nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestCustomHostKeys(t *testing.T) {
 }
 
 func TestCustomHostClearsTheWarningOnSubmit(t *testing.T) {
-	for _, k := range []string{"enter", "ctrl+a"} {
+	for _, k := range []string{"enter", "ctrl+g"} {
 		t.Run(k, func(t *testing.T) {
 			m := customHost(0)
 			sendKeys(m, k)
@@ -81,11 +81,22 @@ func TestCustomHostClearsTheWarningOnSubmit(t *testing.T) {
 	}
 }
 
+// Ctrl+a belongs to the text field: it moves the cursor to the line start.
+func TestCustomHostCtrlAMovesToLineStart(t *testing.T) {
+	m := customHost(0)
+	typeText(m, "ab")
+	m.Update(hk("ctrl+a"))
+	typeText(m, "x")
+	if got := m.input.Value(); got != "xab" {
+		t.Fatalf("input %q, want %q", got, "xab")
+	}
+}
+
 func TestCustomHostView(t *testing.T) {
 	m := customHost(0)
 	m.parentCrumb = "Groups > web"
 	screenShows(t, m, []string{"Groups > web > Connect", "host1 user@host2 ...",
-		"⏎ connect  Ctrl+a add to group  Esc cancel"})
+		"⏎ connect  Ctrl+g add to group  Esc cancel"})
 	typeText(m, "ab")
 	screenShows(t, m, []string{"host: ab"}, "host1 user@host2")
 }

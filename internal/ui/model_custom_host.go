@@ -12,7 +12,7 @@ type customHostModel struct {
 	parentCrumb string
 
 	returnTo   screen
-	groupIndex int // -1: no group; Ctrl+A then asks for one
+	groupIndex int // -1: no group; Ctrl+G then asks for one
 
 	width  int
 	height int
@@ -54,7 +54,7 @@ func (m *customHostModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.Esc):
 			return m, msgCmd(customHostCancelMsg{})
-		case key.Matches(msg, m.keymap.SelectAll):
+		case key.Matches(msg, m.keymap.AddToGroup):
 			return m, m.submit(m.addMsg)
 		case msg.String() == "enter":
 			return m, m.submit(m.connectMsg)
@@ -95,7 +95,7 @@ func (m *customHostModel) View() string {
 	var b strings.Builder
 	b.WriteString(m.input.View())
 	b.WriteString("\n")
-	b.WriteString(styledFooter("⏎ connect  Ctrl+a add to group  Esc cancel"))
+	b.WriteString(styledFooter("⏎ connect  Ctrl+g add to group  Esc cancel"))
 
 	footer := ""
 	if !m.toast.empty() {

@@ -60,7 +60,7 @@ type openDefaultsFormMsg struct {
 
 type openCustomHostMsg struct {
 	returnTo   screen
-	groupIndex int // -1 means no group context; Ctrl+a will pick a group
+	groupIndex int // -1 means no group context; Ctrl+g will pick a group
 }
 
 type openHostFormMsg struct {

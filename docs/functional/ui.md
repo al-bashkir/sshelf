@@ -26,7 +26,7 @@ Hosts:
 - `Space` toggle selection.
 - `Ctrl+a` select all, `Ctrl+d` clear selection.
 - `Ctrl+o` connect with custom command (inline popup).
-- `c` connect to custom host (popup).
+- `c` connect to custom host (popup); in the popup `Ctrl+g` adds the typed hosts to a group.
 - `a` add selected hosts to group (group picker).
 - `e` edit host config (popup).
 - `y` copy host config (only if a `[[hosts]]` override exists).

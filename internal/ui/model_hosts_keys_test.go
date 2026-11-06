@@ -28,6 +28,7 @@ func hk(s string) tea.KeyMsg {
 		"ctrl+a":    {Type: tea.KeyCtrlA},
 		"ctrl+d":    {Type: tea.KeyCtrlD},
 		"ctrl+f":    {Type: tea.KeyCtrlF},
+		"ctrl+g":    {Type: tea.KeyCtrlG},
 		"ctrl+h":    {Type: tea.KeyCtrlH},
 		"ctrl+o":    {Type: tea.KeyCtrlO},
 		"ctrl+s":    {Type: tea.KeyCtrlS},
