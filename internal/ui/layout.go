@@ -29,12 +29,13 @@ const (
 	helpBoxOverhead = 4
 
 	// modalFormLabelWidth is the label column width for modal forms
-	// (group form, host form).
+	// (group form, host form). Each label width fits its form's longest
+	// "Label:"; form_labels_test.go fails when a label does not fit.
 	modalFormLabelWidth = 14
 
 	// defaultsFormLabelWidth is the label column width for the full-screen
 	// settings (defaults) form.
-	defaultsFormLabelWidth = 16
+	defaultsFormLabelWidth = 18
 
 	// quitConfirmMaxW is the maximum content width for the quit confirm dialog.
 	quitConfirmMaxW = 52

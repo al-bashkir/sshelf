@@ -402,8 +402,8 @@ func TestFormScreensBorderFormatChoices(t *testing.T) {
 func TestSettingsPortAndThresholdAreNarrow(t *testing.T) {
 	m := newDefaultsFormModel(config.DefaultConfig().Defaults, false)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	if p, th, u := m.form.input("port").Width, m.form.input("threshold").Width, m.form.input("user").Width; p != 12 || th != 12 || u != 79 {
-		t.Fatalf("port %d, threshold %d, user %d wide, want 12, 12 and 79", p, th, u)
+	if p, th, u := m.form.input("port").Width, m.form.input("threshold").Width, m.form.input("user").Width; p != 12 || th != 12 || u != 77 {
+		t.Fatalf("port %d, threshold %d, user %d wide, want 12, 12 and 77", p, th, u)
 	}
 }
 

@@ -78,60 +78,60 @@ func TestSettingsRowsShowEachFieldKind(t *testing.T) {
 	m := frlSettings(nil)
 	frlShows(t, m,
 		frlSection("SSH", 98),
-		"> User:            login username",
+		"> User:              login username",
 		"  ╰ Default SSH username for all connections",
-		"  Port:            22",
-		"  Identity file:   ~/.ssh/id_ed25519",
-		"  Extra arguments: -o Option=value ...")
+		"  Port:              22",
+		"  Identity file:     ~/.ssh/id_ed25519",
+		"  Extra arguments:   -o Option=value ...")
 	frlShows(t, m,
 		frlSection("Appearance", 98),
-		"  Colorscheme:     default ▾",
-		"  Accent color:    default ▾")
+		"  Colorscheme:       default ▾",
+		"  Accent color:      default ▾")
 	frlShows(t, m,
 		frlSection("Tmux", 98),
-		"  Tmux mode:       auto ▾",
-		"  Open mode:       auto ▾",
-		"  Session name:    sshelf",
+		"  Tmux mode:         auto ▾",
+		"  Open mode:         auto ▾",
+		"  Session name:      sshelf",
 		frlSection("Behavior", 98))
 	frlShows(t, m,
-		"  Border position: bottom ▾",
-		("  Border format:   " + config.DefaultPaneBorderFormat)[:98])
+		"  Border position:   bottom ▾",
+		("  Border format:     " + config.DefaultPaneBorderFormat)[:98])
 }
 
 // The help line follows the focus, and field help off hides it.
 func TestSettingsHelpLineFollowsFocus(t *testing.T) {
 	frlShows(t, frlSettings(nil, "j"),
-		"  User:            login username",
-		"> Port:            22",
+		"  User:              login username",
+		"> Port:              22",
 		"  ╰ Default SSH port (1–65535)",
-		"  Identity file:   ~/.ssh/id_ed25519")
+		"  Identity file:     ~/.ssh/id_ed25519")
 	frlShows(t, frlSettings(frlHelpOff, "j"),
-		"  User:            login username",
-		"> Port:            22",
-		"  Identity file:   ~/.ssh/id_ed25519")
+		"  User:              login username",
+		"> Port:              22",
+		"  Identity file:     ~/.ssh/id_ed25519")
 }
 
 // A bad value shows its error in place of the help line, also with field
 // help off, and only while its field has focus.
 func TestSettingsErrorShowsUnderTheFocusedField(t *testing.T) {
 	const bad = "  ╰ must be a number 1-65535"
-	frlShows(t, frlSettings(frlHelpOff, "j", "i", "x", "esc"), "> Port:            22x", bad, "  Identity file:   ~/.ssh/id_ed25519")
+	frlShows(t, frlSettings(frlHelpOff, "j", "i", "x", "esc"), "> Port:              22x", bad, "  Identity file:     ~/.ssh/id_ed25519")
 
 	m := frlSettings(nil, "j", "i", "x", "esc")
-	frlShows(t, m, "> Port:            22x", bad, "  Identity file:   ~/.ssh/id_ed25519")
+	frlShows(t, m, "> Port:              22x", bad, "  Identity file:     ~/.ssh/id_ed25519")
 	sendKeys(m, "j")
-	frlShows(t, m, "• Port:            22x", "> Identity file:   ~/.ssh/id_ed25519", "  ╰ Path to SSH private key for authentication")
+	frlShows(t, m, "• Port:              22x", "> Identity file:     ~/.ssh/id_ed25519", "  ╰ Path to SSH private key for authentication")
 	sendKeys(m, "k", "i", "backspace", "esc")
-	frlShows(t, m, "> Port:            22", "  ╰ Default SSH port (1–65535)")
+	frlShows(t, m, "> Port:              22", "  ╰ Default SSH port (1–65535)")
 }
 
 // A changed field shows • once focus leaves it; unchanged fields keep the
 // plain indent.
 func TestSettingsMarksChangedFields(t *testing.T) {
 	m := frlSettings(nil, "i", "x", "esc")
-	frlShows(t, m, "> User:            x", "  ╰ Default SSH username for all connections", "  Port:            22")
+	frlShows(t, m, "> User:              x", "  ╰ Default SSH username for all connections", "  Port:              22")
 	sendKeys(m, "j")
-	frlShows(t, m, "• User:            x", "> Port:            22", "  ╰ Default SSH port (1–65535)", "  Identity file:   ~/.ssh/id_ed25519")
+	frlShows(t, m, "• User:              x", "> Port:              22", "  ╰ Default SSH port (1–65535)", "  Identity file:     ~/.ssh/id_ed25519")
 }
 
 // A disabled field shows its value (or default) without ▾, and its reason
@@ -141,18 +141,18 @@ func TestSettingsDisabledAccent(t *testing.T) {
 	for accent, shown := range map[string]string{"": "default", "blue": "blue"} {
 		m := frlSettings(func(d *config.Defaults) { d.Colorscheme, d.AccentColor = "nord", accent })
 		frlShows(t, m,
-			"  Colorscheme:     nord ▾",
-			"  Accent color:    "+shown,
+			"  Colorscheme:       nord ▾",
+			"  Accent color:      "+shown,
 			"  ╰ overridden by nord theme",
-			"  Field help:      yes ▾")
+			"  Field help:        yes ▾")
 	}
 	m := frlSettings(nil,
 		"j", "j", "j", "j", "j", "j", "enter", "j", "enter", // accent: blue
 		"k", "enter", "j", "j", "enter") // colorscheme: nord
 	frlShows(t, m,
-		"> Colorscheme:     nord ▾",
+		"> Colorscheme:       nord ▾",
 		"  ╰ Application color theme",
-		"• Accent color:    blue",
+		"• Accent color:      blue",
 		"  ╰ overridden by nord theme")
 }
 
@@ -160,7 +160,7 @@ func TestSettingsDisabledAccent(t *testing.T) {
 // it is, trimmed; an empty one shows as default.
 func TestSettingsPickerShowsAnUnlistedValue(t *testing.T) {
 	m := frlSettings(func(d *config.Defaults) { d.Tmux, d.OpenMode = "", " weird " })
-	frlShows(t, m, "  Tmux mode:       default ▾", "  Open mode:       weird ▾")
+	frlShows(t, m, "  Tmux mode:         default ▾", "  Open mode:         weird ▾")
 }
 
 // The group form: picker displays, the sub-modal's default and value, and
