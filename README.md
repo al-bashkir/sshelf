@@ -46,10 +46,10 @@ and can be overridden via the environment:
 make -f .copr/Makefile srpm
 
 # SRPM with an explicit version
-VERSION=0.1.0 make -f .copr/Makefile srpm outdir=~/rpmbuild/SRPMS
+VERSION=0.2.0 make -f .copr/Makefile srpm outdir=~/rpmbuild/SRPMS
 
 # Build a local binary RPM from the SRPM
-rpmbuild --rebuild ~/rpmbuild/SRPMS/sshelf-0.1.0-1.*.src.rpm
+rpmbuild --rebuild ~/rpmbuild/SRPMS/sshelf-0.2.0-1.*.src.rpm
 ```
 
 ## Usage
