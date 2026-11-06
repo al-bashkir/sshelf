@@ -38,11 +38,7 @@ func (d paneBorderFormatsDelegate) Spacing() int                            { re
 func (d paneBorderFormatsDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d paneBorderFormatsDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	row, ok := item.(paneBorderFormatRow)
-	if !ok {
-		fmt.Fprint(w, item.FilterValue())
-		return
-	}
+	row := item.(paneBorderFormatRow)
 	text := row.label
 	if strings.TrimSpace(row.value) != "" {
 		text = row.label + "  " + row.value

@@ -39,11 +39,7 @@ func (d hostDelegate) Spacing() int                            { return 0 }
 func (d hostDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d hostDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	row, ok := item.(hostRow)
-	if !ok {
-		fmt.Fprint(w, item.FilterValue())
-		return
-	}
+	row := item.(hostRow)
 	fmt.Fprint(w, renderHostLikeRow(m.Width(), index == m.Index(), row.selected, row.host, row.hasCfg, row.hidden, row.matchedIndexes))
 }
 

@@ -35,13 +35,9 @@ func copyHostConfigCmd(inv config.Inventory, host string, returnTo screen, t *to
 }
 
 func findHostConfig(inv config.Inventory, host string) (index int, hc config.Host) {
-	if h, ok := sshcmd.FindHostConfig(inv.Hosts, host); ok {
-		for i := range inv.Hosts {
-			if strings.TrimSpace(inv.Hosts[i].Host) == strings.TrimSpace(h.Host) {
-				return i, h
-			}
-		}
-		return -1, h
+	if h, ok := sshcmd.FindHostConfig(inv.Hosts, host); ok { // h is an entry of inv.Hosts
+		name := strings.TrimSpace(h.Host)
+		return slices.IndexFunc(inv.Hosts, func(e config.Host) bool { return strings.TrimSpace(e.Host) == name }), h
 	}
 	return -1, config.Host{Host: strings.TrimSpace(host)}
 }

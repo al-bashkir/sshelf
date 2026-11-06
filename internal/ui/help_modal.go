@@ -98,11 +98,6 @@ func renderHelpModal(width, height int, title string, keys helpMap) string {
 }
 
 func renderHelpModalWithVP(width, height int, title string, keys helpMap, vp *viewport.Model) string {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		title = "Help"
-	}
-
 	// Fallback for very early render before we have window size.
 	if width <= 0 || height <= 0 {
 		return helpTitleStyle.Render(title) + "\n\n" + renderHelpSections(keys.sections)

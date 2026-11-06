@@ -23,11 +23,7 @@ func (d groupsDelegate) Spacing() int                            { return 0 }
 func (d groupsDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d groupsDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	row, ok := item.(groupRow)
-	if !ok {
-		fmt.Fprint(w, item.FilterValue())
-		return
-	}
+	row := item.(groupRow)
 	fmt.Fprint(w, renderGroupRow(m.Width(), index == m.Index(), row.name, row.hostCount, row.matchedIndexes))
 }
 

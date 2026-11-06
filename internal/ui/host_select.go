@@ -62,35 +62,25 @@ func (s *hostSelectList) refreshVisibleSelection() {
 	l := s.l
 	items := l.Items()
 	for i := range items {
-		row, ok := items[i].(hostRow)
-		if !ok {
-			continue
-		}
+		row := items[i].(hostRow)
 		row.selected = s.selected[row.host]
 		items[i] = row
 	}
 	l.SetItems(items)
 }
 
-// refreshVisibleBadges updates hasCfg badges on visible list items.
+// refreshVisibleBadges updates hasCfg badges on visible list items. The
+// item count does not change, so SetItems keeps the cursor.
 func (s *hostSelectList) refreshVisibleBadges(inv config.Inventory) {
 	l := s.l
-	idx := l.Index()
 	items := l.Items()
 	hidx := newHostIndex(inv)
 	for i := range items {
-		row, ok := items[i].(hostRow)
-		if !ok {
-			continue
-		}
-		_, ok = hidx.lookup(row.host)
-		row.hasCfg = ok
+		row := items[i].(hostRow)
+		_, row.hasCfg = hidx.lookup(row.host)
 		items[i] = row
 	}
 	l.SetItems(items)
-	if idx >= 0 && idx < len(items) {
-		l.Select(idx)
-	}
 }
 
 // toggleCurrentSelection toggles selection on the currently focused host.
@@ -182,9 +172,7 @@ func (s *hostSelectList) filter(query string, inv config.Inventory, excludeHidde
 		s.matchIdxes = make(map[string][]int, len(matches))
 		for _, match := range matches {
 			s.filtered = append(s.filtered, match.Str)
-			if len(match.MatchedIndexes) > 0 {
-				s.matchIdxes[match.Str] = match.MatchedIndexes
-			}
+			s.matchIdxes[match.Str] = match.MatchedIndexes // a match marks at least one letter
 		}
 	}
 

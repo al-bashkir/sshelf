@@ -218,12 +218,9 @@ func handleConfirmConnect(
 	switch msg.String() {
 	case "y", "Y", "enter":
 		*confirmConnect = false
-		fn := *pendingFn
+		fn := *pendingFn // connect sets it with confirmConnect
 		*pendingFn = nil
-		if fn != nil {
-			return true, fn()
-		}
-		return true, nil
+		return true, fn()
 	case "n", "N", "esc":
 		*confirmConnect = false
 		*pendingFn = nil

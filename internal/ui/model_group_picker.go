@@ -31,11 +31,7 @@ func (d groupPickerDelegate) Spacing() int                            { return 0
 func (d groupPickerDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d groupPickerDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	row, ok := item.(groupPickRow)
-	if !ok {
-		fmt.Fprint(w, item.FilterValue())
-		return
-	}
+	row := item.(groupPickRow)
 	fmt.Fprint(w, renderSimpleRow(m.Width(), index == m.Index(), row.name, row.matchedIndexes))
 }
 
