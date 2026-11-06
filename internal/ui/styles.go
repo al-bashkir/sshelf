@@ -253,28 +253,21 @@ var (
 	toastErrStyle  lipgloss.Style
 )
 
+// SetAccentColor applies the default colors with the named accent. Every
+// color a theme set is undone, its background too.
 func SetAccentColor(name string) {
-	// Switching to accent-only mode clears any theme background.
-	cBackground = ""
-	bgANSICode = ""
-
+	cs := builtinColorSchemes["default"]
 	name = strings.ToLower(strings.TrimSpace(name))
-	if name == "" || name == "default" {
-		cAccent = defaultAccent
-	} else if v, ok := accentPresets[name]; ok {
-		cAccent = v
-	} else {
+	switch v, ok := accentPresets[name]; {
+	case name == "" || name == "default":
+	case ok:
+		cs.Accent = v
+	default:
 		// Allow arbitrary lipgloss color values ("#RRGGBB", "34", "colour196", ...).
-		cAccent = lipgloss.AdaptiveColor{Light: name, Dark: name}
+		cs.Accent = lipgloss.AdaptiveColor{Light: name, Dark: name}
 	}
-
-	// Reset extended roles to defaults (no theme).
-	cFocusedBorder = cAccent
-	cDisabled = lipgloss.AdaptiveColor{Light: "248", Dark: "240"}
-	cHint = lipgloss.AdaptiveColor{Light: "245", Dark: "245"}
-	cSecondary = lipgloss.AdaptiveColor{Light: "67", Dark: "67"}
-
-	rebuildAllStyles()
+	cs.FocusedBorder = cs.Accent
+	applyScheme(cs)
 }
 
 // ApplyColorScheme applies a named colorscheme if scheme is non-empty and

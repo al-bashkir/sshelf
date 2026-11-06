@@ -6,6 +6,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// colorsNow reads the colors in effect as a colorScheme.
+func colorsNow() colorScheme {
+	return colorScheme{
+		Accent: cAccent, Muted: cMuted, OK: cOK, Warn: cWarn, Err: cErr,
+		FrameBorder: cFrameBorder, SearchDim: cSearchDim,
+		RowActiveBG: cRowActiveBG, RowActiveFG: cRowActiveFG, Background: cBackground,
+		FocusedBorder: cFocusedBorder, Disabled: cDisabled, Hint: cHint, Secondary: cSecondary,
+	}
+}
+
 func TestHexToANSIBG(t *testing.T) {
 	for in, want := range map[string]string{
 		"#1e1e2e": "\x1b[48;2;30;30;46m",
@@ -28,6 +38,24 @@ func TestEveryThemeBackgroundParses(t *testing.T) {
 	for name, cs := range builtinColorSchemes {
 		if (cs.Background != "") != (hexToANSIBG(cs.Background) != "") {
 			t.Errorf("%s: background %q does not parse", name, cs.Background)
+		}
+	}
+}
+
+// Settings applies the scheme again on save, so going back to default must
+// undo every color a theme set.
+func TestDefaultSchemeUndoesATheme(t *testing.T) {
+	t.Cleanup(func() { ApplyColorScheme("", "") })
+	ApplyColorScheme("", "")
+	want := colorsNow()
+	for name := range builtinColorSchemes {
+		ApplyColorScheme(name, "")
+		if name != "default" && bgANSICode == "" && builtinColorSchemes[name].Background != "" {
+			t.Errorf("%s: no background code", name)
+		}
+		ApplyColorScheme("default", "")
+		if got := colorsNow(); got != want || bgANSICode != "" {
+			t.Errorf("after %s, default: colors %+v, want %+v (background code %q)", name, got, want, bgANSICode)
 		}
 	}
 }
