@@ -35,17 +35,25 @@ type exitState interface {
 	ExecCmd() []string
 }
 
+// Run shows the TUI on the real terminal. Its result comes from exitResult.
 func Run(opts Options) error {
+	opts = withDefaultKnownHosts(opts)
+	ApplyColorScheme(opts.Config.Defaults.Colorscheme, opts.Config.Defaults.AccentColor)
+	return exitResult(tea.NewProgram(newAppModel(opts), tea.WithAltScreen()).Run())
+}
+
+// withDefaultKnownHosts sets the default known_hosts path when the config
+// loads known_hosts and no path was given.
+func withDefaultKnownHosts(opts Options) Options {
 	if len(opts.KnownHosts) == 0 && opts.Config.Defaults.LoadKnownHosts {
 		opts.KnownHosts = hosts.DefaultKnownHostsPaths()
 	}
+	return opts
+}
 
-	ApplyColorScheme(opts.Config.Defaults.Colorscheme, opts.Config.Defaults.AccentColor)
-
-	m := newAppModel(opts)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	model, err := p.Run()
+// exitResult turns how the program ended into Run's error: the program's own
+// error, an ExecRequest for the command to exec, ErrQuit, or nil.
+func exitResult(model tea.Model, err error) error {
 	if err != nil {
 		return err
 	}
