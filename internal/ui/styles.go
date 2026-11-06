@@ -449,74 +449,41 @@ func frameInnerSize(w, h int) (innerW, innerH int) {
 	return innerW, innerH
 }
 
+// joinHeader lays out a header line width columns wide: left, then right
+// flush right, one space apart at least. It cuts left first, then right.
+// With an unknown width (0 or less) it joins them with one space.
 func joinHeader(width int, left, right string) string {
 	left = strings.TrimSpace(left)
 	right = strings.TrimSpace(right)
-	if width <= 0 {
-		if right == "" {
-			return left
-		}
-		if left == "" {
-			return right
-		}
-		return left + " " + right
-	}
-	if right == "" {
-		return lipgloss.NewStyle().MaxWidth(width).Render(left)
-	}
-
 	rw := lipgloss.Width(right)
-	if rw >= width {
+	switch {
+	case width <= 0:
+		return strings.TrimSpace(left + " " + right)
+	case right == "":
+		return lipgloss.NewStyle().MaxWidth(width).Render(left)
+	case rw >= width:
 		return lipgloss.NewStyle().MaxWidth(width).Render(right)
+	case rw == width-1: // room for the space only
+		return " " + right
 	}
-
-	if left == "" {
-		return strings.Repeat(" ", width-rw) + right
-	}
-
-	leftAvail := width - rw - 1
-	if leftAvail <= 0 {
-		return strings.Repeat(" ", width-rw) + right
-	}
-	left = lipgloss.NewStyle().MaxWidth(leftAvail).Render(left)
-	lw := lipgloss.Width(left)
-	gap := width - lw - rw
-	if gap < 1 {
-		gap = 1
-	}
-	return left + strings.Repeat(" ", gap) + right
+	left = lipgloss.NewStyle().MaxWidth(width - rw - 1).Render(left)
+	return left + strings.Repeat(" ", width-rw-lipgloss.Width(left)) + right
 }
 
 // renderFocusedFrame renders a bordered modal frame using focusedFrameStyle
 // (cFocusedBorder) so overlays stand out from the background tab box.
+// Before the size is known it gives the lines without a frame.
 func renderFocusedFrame(w, h int, title string, headerRight string, body string, footer string) string {
+	foot := ""
+	if strings.TrimSpace(footer) != "" {
+		foot = "\n" + footer
+	}
 	if w <= 0 || h <= 0 {
-		out := strings.TrimSpace(title)
-		if out != "" {
-			header := out
-			if strings.TrimSpace(headerRight) != "" {
-				header = header + " " + strings.TrimSpace(headerRight)
-			}
-			out = headerStyle.Render(header) + "\n"
-		}
-		out += strings.TrimSpace(body)
-		if strings.TrimSpace(footer) != "" {
-			out += "\n" + footer
-		}
-		return strings.TrimSpace(out)
+		return strings.TrimSpace(headerStyle.Render(joinHeader(0, title, headerRight)) + "\n" + strings.TrimSpace(body) + foot)
 	}
 
 	innerW, _ := frameInnerSize(w, h)
-	head := headerStyle.Render(joinHeader(innerW, title, headerRight))
-	foot := ""
-	if strings.TrimSpace(footer) != "" {
-		foot = footer
-	}
-
-	content := strings.TrimRight(head+"\n"+body, "\n")
-	if foot != "" {
-		content = strings.TrimRight(content, "\n") + "\n" + foot
-	}
+	content := strings.TrimRight(headerStyle.Render(joinHeader(innerW, title, headerRight))+"\n"+body, "\n") + foot
 	// lipgloss draws the border outside Width/Height; take it from w x h.
 	box := focusedFrameStyle.
 		Width(w - focusedFrameStyle.GetHorizontalBorderSize()).
