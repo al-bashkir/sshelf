@@ -161,6 +161,10 @@ func TestChildren(t *testing.T) {
 			t.Errorf("Children(%q) = %v, want %v", path, got, want)
 		}
 	}
+	// Names that differ only in case keep their stored order.
+	if got := Children([]Group{{Name: "web"}, {Name: "Web"}}, ""); !reflect.DeepEqual(got, []int{0, 1}) {
+		t.Errorf("web, Web: %v, want [0 1]", got)
+	}
 }
 
 func TestReparentGroups(t *testing.T) {

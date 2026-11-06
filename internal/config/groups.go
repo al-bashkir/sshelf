@@ -186,7 +186,7 @@ func treeAt(tree []GroupNode, i int) int {
 func ancestors(tree []GroupNode, at int) []int {
 	var out []int
 	depth := tree[at].Depth
-	for j := at - 1; j >= 0 && depth > 0; j-- {
+	for j := at - 1; j >= 0; j-- {
 		if tree[j].Depth < depth {
 			out = append(out, tree[j].Index)
 			depth = tree[j].Depth
