@@ -394,3 +394,20 @@ func TestPickerStatusLine(t *testing.T) {
 	sendKeys(m, "x")
 	screenShows(t, m, []string{"search: h0" + x38 + "..."})
 }
+
+func TestGroupPickerRowsSitOnConsecutiveLines(t *testing.T) {
+	inv := config.Inventory{Groups: []config.Group{{Name: "web"}, {Name: "Web"}, {Name: "db"}}}
+	m := newGroupPickerModel(Options{Config: config.DefaultConfig(), Inventory: inv})
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	lines := strings.Split(plainView(m), "\n")
+	row := func(name string) int {
+		return slices.IndexFunc(lines, func(l string) bool { return strings.HasSuffix(strings.TrimRight(l, " │"), " "+name) })
+	}
+	// Sorted without case; equal names keep the inventory order.
+	if db, web, Web := row("db"), row("web"), row("Web"); db < 0 || web != db+1 || Web != web+1 {
+		t.Fatalf("rows db %d, web %d, Web %d, want consecutive in that order:\n%s", db, web, Web, plainView(m))
+	}
+	if !strings.Contains(lines[row("db")], "▸ db") || strings.Contains(lines[row("web")], "▸") {
+		t.Fatalf("the cursor is not on db alone:\n%s", plainView(m))
+	}
+}
