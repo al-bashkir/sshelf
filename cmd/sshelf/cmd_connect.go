@@ -29,7 +29,7 @@ func (c cli) connect(args []string, cfg config.Config, inv config.Inventory, noT
 }
 
 func (c cli) connectGroup(name string, cfg config.Config, inv config.Inventory, noTmux bool) error {
-	i := slices.IndexFunc(inv.Groups, func(g config.Group) bool { return strings.EqualFold(g.Name, name) })
+	i := slices.IndexFunc(inv.Groups, func(g config.Group) bool { return strings.EqualFold(config.GroupPath(g), name) })
 	if i < 0 {
 		return fmt.Errorf("group %q not found", name)
 	}

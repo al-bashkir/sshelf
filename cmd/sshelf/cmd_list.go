@@ -39,12 +39,12 @@ func (c cli) listGroups(inv config.Inventory, asJSON bool) error {
 		out := make([]groupJSON, 0, len(inv.Groups))
 		for _, g := range inv.Groups {
 			// A non-nil slice prints as [] instead of null.
-			out = append(out, groupJSON{Name: g.Name, Hosts: append([]string{}, g.Hosts...)})
+			out = append(out, groupJSON{Name: config.GroupPath(g), Hosts: append([]string{}, g.Hosts...)})
 		}
 		return c.printJSON(out)
 	}
 	for _, g := range inv.Groups {
-		_, _ = fmt.Fprintf(c.stdout, "%s (%d hosts)\n", g.Name, len(g.Hosts))
+		_, _ = fmt.Fprintf(c.stdout, "%s (%d hosts)\n", config.GroupPath(g), len(g.Hosts))
 	}
 	return nil
 }

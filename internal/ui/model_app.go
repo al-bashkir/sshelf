@@ -382,14 +382,14 @@ func (m *appModel) View() string {
 
 func (m *appModel) saveGroup(index int, g config.Group) error {
 	g.Name = strings.TrimSpace(g.Name)
-	groups, err := upsert(m.opts.Inventory.Groups, index, g, func(g config.Group) string { return g.Name }, "group name")
+	groups, err := upsert(m.opts.Inventory.Groups, index, g, config.GroupPath, "group name") // a name is unique in its parent
 	if err != nil {
 		return err
 	}
 	newInv := m.opts.Inventory
 	newInv.Groups = groups
-	if index >= 0 { // a renamed group keeps its subgroups
-		newInv.Groups = config.ReparentGroups(groups, m.opts.Inventory.Groups[index].Name, g.Name)
+	if index >= 0 { // a renamed or moved group takes its subgroups along
+		newInv.Groups = config.ReparentGroups(groups, config.GroupPath(m.opts.Inventory.Groups[index]), config.GroupPath(g))
 	}
 	return m.commitInventory(newInv)
 }
@@ -555,10 +555,7 @@ func (m *appModel) deleteGroup(index int) error {
 	}
 
 	newInv := m.opts.Inventory
-	newInv.Groups = append([]config.Group(nil), newInv.Groups...)
-	newInv.Groups = append(newInv.Groups[:index], newInv.Groups[index+1:]...)
-	gone := m.opts.Inventory.Groups[index]
-	newInv.Groups = config.ReparentGroups(newInv.Groups, gone.Name, gone.Parent) // its subgroups move up
+	newInv.Groups = config.DeleteGroup(newInv.Groups, index) // with its subgroups
 	return m.commitInventory(newInv)
 }
 

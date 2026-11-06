@@ -130,7 +130,7 @@ func TestHostsViewOverlays(t *testing.T) {
 func nestedGroups(o *Options) {
 	o.Inventory.Groups[0].Hosts = []string{"w1"}
 	o.Inventory.Groups = append(o.Inventory.Groups,
-		config.Group{Name: "top", Parent: "web"}, config.Group{Name: "leaf", Parent: "top", Hosts: []string{"l1", "w1"}})
+		config.Group{Name: "top", Parent: "web"}, config.Group{Name: "leaf", Parent: "web/top", Hosts: []string{"l1", "w1"}})
 }
 
 func TestGroupsViewShowsTheTree(t *testing.T) {

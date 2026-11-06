@@ -194,7 +194,8 @@ func (m *groupFormModel) View() string {
 func parentOptions(groups []config.Group, index int) []fieldOption {
 	out := []fieldOption{{Value: "", Display: "none"}}
 	for _, n := range config.ParentChoices(groups, index) {
-		out = append(out, fieldOption{Value: groups[n.Index].Name, Display: groups[n.Index].Name})
+		p := config.GroupPath(groups[n.Index])
+		out = append(out, fieldOption{Value: p, Display: p})
 	}
 	return out
 }

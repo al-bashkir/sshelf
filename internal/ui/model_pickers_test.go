@@ -237,6 +237,12 @@ func TestGroupPickerEnterPicksTheCurrentGroup(t *testing.T) {
 	if got := picked(m, "space", "j", "enter"); got != 1 {
 		t.Fatalf("picked index %d, want 1 (db); Space must not select", got)
 	}
+	// A subgroup shows its path: two groups can share a name.
+	inv := config.Inventory{Groups: []config.Group{{Name: "prod"}, {Name: "web", Parent: "prod"}, {Name: "web"}}}
+	nested := newGroupPickerModel(Options{Config: config.DefaultConfig(), Inventory: inv})
+	if rows := groupPickRows(nested); !slices.Equal(rows, []string{"prod", "prod/web", "web"}) {
+		t.Fatalf("rows %q, want paths", rows)
+	}
 	// No group to pick: Enter does nothing.
 	empty := newGroupPickerModel(Options{Config: config.DefaultConfig()})
 	if got := keys(empty, "enter"); got != nil {

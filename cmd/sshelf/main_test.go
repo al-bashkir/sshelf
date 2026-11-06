@@ -93,12 +93,14 @@ func TestRun(t *testing.T) {
 		{"-config $D/inv/config.toml -hosts $D/sshelf/hosts.toml list groups", 0, "web (2 hosts)\nempty (0 hosts)\n", ""},
 		{"-config $D/bad/config.toml list groups", 1, "", "warning: config migration failed"},
 		{"-config $D/inv/config.toml -hosts $D/badinv/hosts.toml list groups", 1, "", `group "bad/name"`},
+		{"-config $D/nest/config.toml list groups", 0, "top (0 hosts)\ntop/leaf (1 hosts)\n", ""},
 
 		{"connect", 1, "", "connect requires a subcommand"},
 		{"connect group", 1, "", "connect group requires a name"},
 		{"c host", 1, "", "connect host requires a name"},
 		{"connect x", 1, "", `unknown connect subcommand "x"`},
 		{"connect group nope", 1, "", `group "nope" not found`},
+		{"-config $D/nest/config.toml connect group leaf", 1, "", `group "leaf" not found`}, // a subgroup goes by its path
 		{"connect g EMPTY", 1, "", `group "EMPTY" has no hosts`},
 		{"-no-tmux connect group WEB", 1, "", "multi-host requires tmux"},
 
@@ -106,6 +108,7 @@ func TestRun(t *testing.T) {
 		{"comp fish", 1, "", `unknown shell "fish"`},
 
 		{kh + "__complete groups", 0, "web\nempty\n", ""},
+		{"-config $D/nest/config.toml __complete groups", 0, "top\ntop/leaf\n", ""},
 		{kh + "__complete hosts", 0, "kh1\nkh2\nkh3\n", ""},
 		{"__complete x", 0, "", ""},
 		{"__complete", 0, "", ""},
@@ -156,6 +159,12 @@ func TestRunConnectNestedGroup(t *testing.T) {
 	code, _, errOut := sshelf(t, p, fixture(t), "-no-tmux -config $D/nest/config.toml connect group top")
 	if want := [][]string{{"ssh", "--", "admin@l1"}}; code != 0 || !reflect.DeepEqual(p.execed, want) {
 		t.Fatalf("code=%d exec=%q stderr=%q, want exec %q", code, p.execed, errOut, want)
+	}
+	// A subgroup goes by its path, in any case.
+	p = &proc{}
+	code, _, errOut = sshelf(t, p, fixture(t), "-no-tmux -config $D/nest/config.toml connect group TOP/Leaf")
+	if want := [][]string{{"ssh", "--", "admin@l1"}}; code != 0 || !reflect.DeepEqual(p.execed, want) {
+		t.Fatalf("path: code=%d exec=%q stderr=%q, want exec %q", code, p.execed, errOut, want)
 	}
 }
 

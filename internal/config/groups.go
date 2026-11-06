@@ -13,31 +13,50 @@ type GroupNode struct {
 	Depth int // 0 for a top-level group
 }
 
-// GroupTree lists the groups in tree order: each group is followed by its
-// subgroups, and siblings sort by name, ignoring case. A group whose parents
-// loop is left out; load and save refuse such an inventory.
-func GroupTree(groups []Group) []GroupNode {
-	kids := map[int][]int{}
+// GroupPath is the path of g: the path of its parent and its name, joined by
+// "/". A group is known by its path; one name can be in two parents.
+func GroupPath(g Group) string {
+	if g.Parent == "" {
+		return g.Name
+	}
+	return g.Parent + "/" + g.Name
+}
+
+// FindGroup returns the index of the group at path, or -1.
+func FindGroup(groups []Group, path string) int {
+	return slices.IndexFunc(groups, func(g Group) bool { return GroupPath(g) == path })
+}
+
+// Children returns the groups directly in the group at path ("" for the top
+// level), sorted by name, ignoring case.
+func Children(groups []Group, path string) []int {
+	var out []int
 	for i, g := range groups {
-		p := -1
-		if g.Parent != "" {
-			p = groupIndex(groups, g.Parent)
+		if g.Parent == path {
+			out = append(out, i)
 		}
-		kids[p] = append(kids[p], i)
 	}
+	sort.SliceStable(out, func(a, b int) bool {
+		return strings.ToLower(groups[out[a]].Name) < strings.ToLower(groups[out[b]].Name)
+	})
+	return out
+}
+
+// GroupTree lists the groups in tree order: each group is followed by its
+// subgroups. A parent path is always shorter than the path of its group, so
+// parents cannot loop.
+func GroupTree(groups []Group) []GroupNode {
 	var out []GroupNode
-	var walk func(parent, depth int)
-	walk = func(parent, depth int) {
-		k := kids[parent]
-		sort.SliceStable(k, func(a, b int) bool {
-			return strings.ToLower(groups[k[a]].Name) < strings.ToLower(groups[k[b]].Name)
-		})
-		for _, i := range k {
+	var walk func(path string, depth int)
+	walk = func(path string, depth int) {
+		for _, i := range Children(groups, path) {
 			out = append(out, GroupNode{Index: i, Depth: depth})
-			walk(i, depth+1)
+			if p := GroupPath(groups[i]); p != path { // an unnamed group would walk into itself
+				walk(p, depth+1)
+			}
 		}
 	}
-	walk(-1, 0)
+	walk("", 0)
 	return out
 }
 
@@ -59,7 +78,7 @@ func ParentChoices(groups []Group, i int) []GroupNode {
 // is not in groups comes back as is.
 func ResolveGroup(groups []Group, g Group) Group {
 	tree := GroupTree(groups)
-	at := treeAt(tree, groupIndex(groups, g.Name))
+	at := treeAt(tree, FindGroup(groups, GroupPath(g)))
 	if at < 0 {
 		return g
 	}
@@ -83,7 +102,7 @@ func ResolveGroup(groups []Group, g Group) Group {
 // host, resolved. A host no group under g lists uses g.
 func HostGroup(groups []Group, g Group, host string) Group {
 	tree := GroupTree(groups)
-	if at := treeAt(tree, groupIndex(groups, g.Name)); at >= 0 {
+	if at := treeAt(tree, FindGroup(groups, GroupPath(g))); at >= 0 {
 		for _, j := range below(tree, at) {
 			if slices.Contains(groups[j].Hosts, host) {
 				return ResolveGroup(groups, groups[j])
@@ -93,35 +112,46 @@ func HostGroup(groups []Group, g Group, host string) Group {
 	return ResolveGroup(groups, g)
 }
 
-// ReparentGroups returns a copy of groups with the subgroups of the group
-// named from moved to to. No group is named "", so from "" moves none.
+// ReparentGroups returns a copy of groups in which every group under the
+// group at path from is under the path to instead: a rename or a move of
+// that group. From "" moves none.
 func ReparentGroups(groups []Group, from, to string) []Group {
 	out := slices.Clone(groups)
 	for i := range out {
-		if from != "" && out[i].Parent == from {
-			out[i].Parent = to
+		if from != "" && under(out[i], from) {
+			out[i].Parent = to + strings.TrimPrefix(out[i].Parent, from)
 		}
 	}
 	return out
 }
 
-// checkGroups checks every group name, and that every parent names a group
-// and does not lead back to the group.
+// DeleteGroup returns a copy of groups without group i and every group
+// under it.
+func DeleteGroup(groups []Group, i int) []Group {
+	path := GroupPath(groups[i])
+	return slices.DeleteFunc(slices.Clone(groups), func(g Group) bool { return GroupPath(g) == path || under(g, path) })
+}
+
+// under reports whether g sits in the group at path, or deeper.
+func under(g Group, path string) bool {
+	return strings.HasPrefix(g.Parent+"/", path+"/")
+}
+
+// checkGroups checks every group name, that every parent path names a group,
+// and that no path is used twice.
 func checkGroups(groups []Group) error {
-	inTree := make([]bool, len(groups))
-	for _, n := range GroupTree(groups) {
-		inTree[n.Index] = true
-	}
-	for i, g := range groups {
-		if err := ValidateGroupName(g.Name); err != nil {
-			return fmt.Errorf("group %q: %w", g.Name, err)
+	seen := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		path := GroupPath(g)
+		switch err := ValidateGroupName(g.Name); {
+		case err != nil:
+			return fmt.Errorf("group %q: %w", path, err)
+		case seen[path]:
+			return fmt.Errorf("group %q is defined twice", path)
+		case g.Parent != "" && FindGroup(groups, g.Parent) < 0:
+			return fmt.Errorf("group %q: parent %q not found", path, g.Parent)
 		}
-		switch {
-		case g.Parent != "" && groupIndex(groups, g.Parent) < 0:
-			return fmt.Errorf("group %q: parent %q not found", g.Name, g.Parent)
-		case !inTree[i]:
-			return fmt.Errorf("group %q: parent %q makes a loop", g.Name, g.Parent)
-		}
+		seen[path] = true
 	}
 	return nil
 }
@@ -145,11 +175,6 @@ func inherit(g, parent Group) Group {
 		g.ExtraArgs = parent.ExtraArgs
 	}
 	return g
-}
-
-// groupIndex returns the index of the group named name, or -1.
-func groupIndex(groups []Group, name string) int {
-	return slices.IndexFunc(groups, func(g Group) bool { return g.Name == name })
 }
 
 // treeAt returns the position of group i in tree, or -1.

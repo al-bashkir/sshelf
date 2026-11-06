@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/al-bashkir/sshelf/internal/config"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -49,7 +51,7 @@ func newGroupPickerModel(opts Options) *groupPickerModel {
 	names := make([]string, 0, len(opts.Inventory.Groups))
 	items := make([]list.Item, 0, len(opts.Inventory.Groups))
 	for i, g := range opts.Inventory.Groups {
-		all = append(all, groupPickRow{index: i, name: g.Name})
+		all = append(all, groupPickRow{index: i, name: config.GroupPath(g)})
 	}
 	sort.SliceStable(all, func(i, j int) bool {
 		return strings.ToLower(all[i].name) < strings.ToLower(all[j].name)

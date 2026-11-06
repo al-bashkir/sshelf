@@ -276,14 +276,44 @@ func TestRouterGroupParents(t *testing.T) {
 			t.Fatalf("saved %+v, want stage under live", got)
 		}
 	})
-	t.Run("a deleted group hands its subgroups to its parent", func(t *testing.T) {
+	t.Run("a deleted group takes its subgroups with it", func(t *testing.T) {
 		m := routerApp(t)
 		m.opts.Inventory.Groups[1].Parent = "prod"
-		m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "qa", Parent: "stage"})
+		m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "qa", Parent: "prod/stage"})
 		m.Update(deleteGroupMsg{index: 1})
-		got := savedInventory(t, m).Groups
-		if len(got) != 2 || got[1].Name != "qa" || got[1].Parent != "prod" {
-			t.Fatalf("saved %+v, want qa under prod", got)
+		if got := savedInventory(t, m).Groups; len(got) != 1 || got[0].Name != "prod" {
+			t.Fatalf("saved %+v, want only prod", got)
+		}
+	})
+	t.Run("a moved group takes its subgroups with it", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.Groups[1].Parent = "prod"
+		m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "qa", Parent: "prod/stage"})
+		m.Update(openGroupFormMsg{index: 1})
+		m.Update(groupFormSaveMsg{index: 1, group: config.Group{Name: "stage"}}) // to the top level
+		if got := savedInventory(t, m).Groups; len(got) != 3 || got[2].Parent != "stage" {
+			t.Fatalf("saved %+v, want qa under stage", got)
+		}
+	})
+	t.Run("one name can sit in two parents, not twice in one", func(t *testing.T) {
+		m := routerApp(t)
+		m.Update(openGroupFormPrefillMsg{})
+		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: "web", Parent: "prod"}})
+		m.Update(openGroupFormPrefillMsg{})
+		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: "web", Parent: "stage"}})
+		if got := savedInventory(t, m).Groups; len(got) != 4 {
+			t.Fatalf("saved %+v, want web under prod and under stage", got)
+		}
+		m.Update(openGroupFormPrefillMsg{})
+		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: "web", Parent: "prod"}})
+		wantToast(t, "form", m.form.toast, "group name already exists", toastErr)
+	})
+	t.Run("the parent picker offers paths", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.Groups[1].Parent = "prod"
+		got := saveWithParent(t, m, openGroupFormPrefillMsg{group: config.Group{Name: "qa"}}, 2) // none, prod, prod/stage
+		if got[2].Parent != "prod/stage" {
+			t.Fatalf("qa parent %q, want prod/stage", got[2].Parent)
 		}
 	})
 }

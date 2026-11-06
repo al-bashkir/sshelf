@@ -8,25 +8,31 @@ import (
 	"testing"
 )
 
-// nested is prod > {web > edge, db} and a top-level alpha, stored out of
-// tree order.
+// nested is prod > {web > edge, db} and alpha > web, stored out of tree
+// order. Two groups are named web: prod/web and alpha/web.
 func nested() []Group {
 	return []Group{
 		{Name: "web", Parent: "prod", User: "www", Hosts: []string{"w1", "p1"}},
 		{Name: "prod", User: "admin", Port: 2222, OpenMode: "tmux-pane", ExtraArgs: []string{"-A"}, Hosts: []string{"p1"}},
-		{Name: "edge", Parent: "web", Hosts: []string{"e1"}},
+		{Name: "edge", Parent: "prod/web", Hosts: []string{"e1"}},
 		{Name: "alpha", Hosts: []string{"a1"}},
 		{Name: "db", Parent: "prod", User: "postgres", Hosts: []string{"d1"}},
+		{Name: "web", Parent: "alpha", User: "alpha-www", Hosts: []string{"aw1"}},
 	}
 }
 
 func TestGroupTree(t *testing.T) {
-	want := []GroupNode{{3, 0}, {1, 0}, {4, 1}, {0, 1}, {2, 2}} // alpha, prod, db, web, edge
+	want := []GroupNode{{3, 0}, {5, 1}, {1, 0}, {4, 1}, {0, 1}, {2, 2}} // alpha, alpha/web, prod, db, web, edge
 	if got := GroupTree(nested()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	if got := GroupTree(nil); len(got) != 0 {
 		t.Fatalf("no groups: got %v", got)
+	}
+	// An unnamed group (load refuses it) has the path of the top level; the
+	// walk must not go into it again.
+	if got := GroupTree([]Group{{Name: ""}, {Name: "a"}}); len(got) != 2 {
+		t.Fatalf("an unnamed group: got %v", got)
 	}
 }
 
@@ -38,9 +44,9 @@ func TestParentChoices(t *testing.T) {
 		want []GroupNode
 	}{
 		{"a new group can go anywhere", -1, GroupTree(gs)},
-		{"prod cannot go under itself or its subgroups", 1, []GroupNode{{3, 0}}},
-		{"web can go under prod or db", 0, []GroupNode{{3, 0}, {1, 0}, {4, 1}}},
-		{"edge can go anywhere else", 2, []GroupNode{{3, 0}, {1, 0}, {4, 1}, {0, 1}}},
+		{"prod cannot go under itself or its subgroups", 1, []GroupNode{{3, 0}, {5, 1}}},
+		{"web can go under alpha, alpha/web, prod or db", 0, []GroupNode{{3, 0}, {5, 1}, {1, 0}, {4, 1}}},
+		{"edge can go anywhere else", 2, []GroupNode{{3, 0}, {5, 1}, {1, 0}, {4, 1}, {0, 1}}},
 	} {
 		if got := ParentChoices(gs, c.i); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
@@ -86,16 +92,16 @@ func TestResolveGroup(t *testing.T) {
 		}
 	})
 	t.Run("a subgroup takes each empty setting from the nearest ancestor", func(t *testing.T) {
-		got := ResolveGroup(gs, gs[2]) // edge sets nothing
+		got := ResolveGroup(gs, gs[2]) // edge sets nothing; its web is prod/web, not alpha/web
 		if got.User != "www" || got.Port != 2222 || got.OpenMode != "tmux-pane" || !reflect.DeepEqual(got.ExtraArgs, []string{"-A"}) {
 			t.Fatalf("got %+v, want user from web, the rest from prod", got)
 		}
-		if got.Name != "edge" || got.Parent != "web" || !reflect.DeepEqual(got.Hosts, []string{"e1"}) {
+		if got.Name != "edge" || got.Parent != "prod/web" || !reflect.DeepEqual(got.Hosts, []string{"e1"}) {
 			t.Fatalf("got %+v, want edge's own name, parent and hosts", got)
 		}
 	})
 	t.Run("a sibling of an ancestor gives nothing", func(t *testing.T) {
-		gs := []Group{{Name: "prod"}, {Name: "a", Parent: "prod", IdentityFile: "a-key"}, {Name: "b", Parent: "prod"}, {Name: "c", Parent: "b"}}
+		gs := []Group{{Name: "prod"}, {Name: "a", Parent: "prod", IdentityFile: "a-key"}, {Name: "b", Parent: "prod"}, {Name: "c", Parent: "prod/b"}}
 		if got := ResolveGroup(gs, gs[3]); got.IdentityFile != "" {
 			t.Fatalf("c took identity %q from a, which is not above it", got.IdentityFile)
 		}
@@ -133,22 +139,78 @@ func TestHostGroup(t *testing.T) {
 	}
 }
 
-func TestReparentGroups(t *testing.T) {
+func TestGroupPathAndFind(t *testing.T) {
 	gs := nested()
-	got := ReparentGroups(gs, "prod", "")
-	for _, i := range []int{0, 4} {
-		if got[i].Parent != "" {
-			t.Errorf("%s still has parent %q", got[i].Name, got[i].Parent)
+	if got := GroupPath(gs[2]); got != "prod/web/edge" {
+		t.Errorf("edge path %q", got)
+	}
+	if got := GroupPath(gs[3]); got != "alpha" {
+		t.Errorf("alpha path %q", got)
+	}
+	for path, want := range map[string]int{"prod/web": 0, "alpha/web": 5, "prod/web/edge": 2, "web": -1, "": -1} {
+		if got := FindGroup(gs, path); got != want {
+			t.Errorf("FindGroup(%q) = %d, want %d", path, got, want)
 		}
 	}
-	if got[2].Parent != "web" {
-		t.Errorf("edge parent %q, want web", got[2].Parent)
+}
+
+func TestChildren(t *testing.T) {
+	gs := nested()
+	for path, want := range map[string][]int{"": {3, 1}, "prod": {4, 0}, "prod/web": {2}, "prod/db": nil} {
+		if got := Children(gs, path); !reflect.DeepEqual(got, want) {
+			t.Errorf("Children(%q) = %v, want %v", path, got, want)
+		}
 	}
-	if gs[0].Parent != "prod" {
+}
+
+func TestReparentGroups(t *testing.T) {
+	gs := nested()
+	t.Run("a rename moves the whole subtree", func(t *testing.T) {
+		got := ReparentGroups(gs, "prod", "live")
+		for i, want := range map[int]string{0: "live", 2: "live/web", 4: "live", 5: "alpha"} {
+			if got[i].Parent != want {
+				t.Errorf("%s parent %q, want %q", got[i].Name, got[i].Parent, want)
+			}
+		}
+		if gs[0].Parent != "prod" {
+			t.Error("the input changed")
+		}
+	})
+	t.Run("a move takes the subgroups along", func(t *testing.T) {
+		if got := ReparentGroups(gs, "prod/web", "alpha/x"); got[2].Parent != "alpha/x" || got[0].Parent != "prod" {
+			t.Errorf("edge parent %q, web parent %q; want alpha/x and prod (the form moves web itself)", got[2].Parent, got[0].Parent)
+		}
+	})
+	t.Run("a name that only starts the same stays", func(t *testing.T) {
+		gs := []Group{{Name: "prod"}, {Name: "prodx"}, {Name: "a", Parent: "prodx"}}
+		if got := ReparentGroups(gs, "prod", "live"); got[2].Parent != "prodx" {
+			t.Errorf("a parent %q, want prodx", got[2].Parent)
+		}
+	})
+	t.Run("from the top level moves nothing", func(t *testing.T) {
+		if got := ReparentGroups(gs, "", "prod"); !reflect.DeepEqual(got, gs) {
+			t.Errorf("moved top-level groups: %+v", got)
+		}
+	})
+}
+
+func TestDeleteGroup(t *testing.T) {
+	gs := nested()
+	paths := func(gs []Group) []string {
+		var out []string
+		for _, g := range gs {
+			out = append(out, GroupPath(g))
+		}
+		return out
+	}
+	if got, want := paths(DeleteGroup(gs, 0)), []string{"prod", "alpha", "prod/db", "alpha/web"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("delete prod/web: %v, want %v", got, want)
+	}
+	if got, want := paths(DeleteGroup(gs, 1)), []string{"alpha", "alpha/web"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("delete prod: %v, want %v", got, want)
+	}
+	if len(gs) != 6 || gs[0].Name != "web" {
 		t.Error("the input changed")
-	}
-	if got := ReparentGroups(gs, "", "prod"); !reflect.DeepEqual(got, gs) {
-		t.Errorf("from \"\" moved top-level groups: %+v", got)
 	}
 }
 
@@ -158,10 +220,12 @@ func TestInventoryParentChecks(t *testing.T) {
 		groups []Group
 		want   string // "" means valid
 	}{
-		{"nested groups", nested(), ""},
-		{"missing parent", []Group{{Name: "a", Parent: "nope"}}, `group "a": parent "nope" not found`},
-		{"own parent", []Group{{Name: "a", Parent: "a"}}, `group "a": parent "a" makes a loop`},
-		{"loop", []Group{{Name: "a", Parent: "b"}, {Name: "b", Parent: "a"}}, `group "a": parent "b" makes a loop`},
+		{"nested groups, one name in two parents", nested(), ""},
+		{"missing parent", []Group{{Name: "a", Parent: "nope"}}, `group "nope/a": parent "nope" not found`},
+		{"own name as parent", []Group{{Name: "a", Parent: "a"}}, `group "a/a": parent "a" not found`},
+		{"missing deep parent", []Group{{Name: "a"}, {Name: "c", Parent: "a/b"}}, `group "a/b/c": parent "a/b" not found`},
+		{"one name twice at the top", []Group{{Name: "a"}, {Name: "a"}}, `group "a" is defined twice`},
+		{"one name twice in a parent", []Group{{Name: "p"}, {Name: "x", Parent: "p"}, {Name: "x", Parent: "p"}}, `group "p/x" is defined twice`},
 		{"bad name", []Group{{Name: "a b"}}, `group "a b": group name "a b" is invalid`},
 	} {
 		t.Run(c.name, func(t *testing.T) {

@@ -69,7 +69,7 @@ hidden = false           # when true, hides this host from the Hosts list
 
 [[groups]]
 name = "prod"
-parent = ""         # optional: name of the group this one sits in; omit for a top-level group
+parent = ""         # optional: path of the group this one sits in ("prod", "prod/web"); omit for a top-level group
 user = "admin"
 port = 22
 identity_file = "~/.ssh/prod_ed25519"
@@ -99,12 +99,13 @@ Settings merge (for an SSH connection):
 
 Nested groups:
 
-- A group with `parent = "<name>"` is a subgroup of that group. A group has at most one parent.
+- A group with `parent = "<path>"` is a subgroup of the group at that path. A path is the group names from the top level down, joined by `/` (`prod/web`). A group has at most one parent.
+- A name must be unique only among the groups in the same parent: `prod/web` and `stage/web` can both exist. The CLI (`connect group`, `list groups`, completion) and the group pickers use the path.
 - A subgroup inherits each setting that it leaves empty from its nearest ancestor that sets it.
 - Connecting to a group opens its own hosts and the hosts of all its subgroups, each host once.
 - Through a parent group, each host uses the settings of the first group in tree order (the group itself first) that lists it.
-- Load and save refuse a parent that does not exist or that leads back to the group.
-- Renaming a group updates the `parent` of its subgroups. Deleting a group moves its subgroups to its own parent.
+- Load and save refuse a parent path that does not exist, and a path that two groups use.
+- Renaming or moving a group moves its subgroups with it. Deleting a group also deletes its subgroups; their hosts stay in the host list.
 
 Notes:
 

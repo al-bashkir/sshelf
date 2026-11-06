@@ -27,7 +27,7 @@ func (c cli) complete(args []string, inv config.Inventory, knownHosts []string) 
 	switch args[0] {
 	case "groups":
 		for _, g := range inv.Groups {
-			_, _ = fmt.Fprintln(c.stdout, g.Name)
+			_, _ = fmt.Fprintln(c.stdout, config.GroupPath(g))
 		}
 	case "hosts":
 		for _, h := range knownHosts {
