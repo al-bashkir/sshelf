@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,49 +15,29 @@ import (
 // does not start a rune is ignored.
 // The result is the same string with matched chars styled.
 func highlightMatches(s string, positions []int, active bool) string {
-	if len(positions) == 0 {
-		return s
-	}
-
-	matchSet := make(map[int]bool, len(positions))
-	for _, p := range positions {
-		matchSet[p] = true
-	}
-
-	var sb strings.Builder
-	sb.Grow(len(s) * 2) // rough estimate
-
 	style := checkedStyle // accent bold
 	if active {
 		style = lipgloss.NewStyle().Underline(true)
 	}
 
-	run := false
-	runStart := 0
+	var sb strings.Builder
+	start, inMatch := 0, false
 	for i := range s { // i is the byte offset of each rune
-		inMatch := matchSet[i]
-		if inMatch && !run {
-			// Flush normal text.
-			if i > runStart {
-				sb.WriteString(s[runStart:i])
-			}
-			run = true
-			runStart = i
-		} else if !inMatch && run {
-			// Flush matched text.
-			sb.WriteString(style.Render(s[runStart:i]))
-			run = false
-			runStart = i
+		if m := slices.Contains(positions, i); m != inMatch {
+			sb.WriteString(markRun(s[start:i], inMatch, style))
+			start, inMatch = i, m
 		}
 	}
-	// Flush remaining.
-	if run {
-		sb.WriteString(style.Render(s[runStart:]))
-	} else if runStart < len(s) {
-		sb.WriteString(s[runStart:])
-	}
-
+	sb.WriteString(markRun(s[start:], inMatch, style))
 	return sb.String()
+}
+
+// markRun styles a run of matched runes; other text stays as it is.
+func markRun(run string, matched bool, style lipgloss.Style) string {
+	if matched {
+		return style.Render(run)
+	}
+	return run
 }
 
 // truncateTail cuts s to max cells and ends it with "…". It counts cells,
@@ -95,55 +76,47 @@ func rowCursor(active bool) string {
 	return "  "
 }
 
-// composeRow assembles one list row: prefix + text + right-aligned suffix.
-// text is truncated to the remaining width (hard cut when active, faded
-// otherwise), fuzzy matches are highlighted, and the active row is padded to
-// the full width so its highlight bar is solid. suffixW is the *styled* width
-// of suffix, so columns do not shift as the cursor moves.
+// composeRow assembles one list row: prefix + text + suffix, the suffix
+// right after the text. text is truncated to the remaining width (hard cut
+// when active, faded otherwise), fuzzy matches are highlighted, and the
+// active row is padded to the full width so its highlight bar is solid.
+// suffixW is the *styled* width of suffix, so columns do not shift as the
+// cursor moves.
 func composeRow(width int, active bool, prefix, text, suffix string, suffixW int, matched []int, dimText bool) string {
-	if width > 0 {
-		avail := width - lipgloss.Width(prefix) - suffixW
-		if avail < 0 {
-			// Not enough room for the badge — drop it.
-			suffix = ""
-			avail = max(0, width-lipgloss.Width(prefix))
-		}
-		if active {
-			text = truncateTail(text, avail)
-		} else {
-			text = truncateFade(text, avail)
-		}
-	}
-
-	if len(matched) > 0 {
-		// Marks stop where the fade's dim style starts: an offset past it
-		// would land inside its escape code.
-		head, _, _ := strings.Cut(text, "\x1b")
-		visibleLen := len(head)
-		shown := make([]int, 0, len(matched))
-		for _, idx := range matched {
-			if idx >= 0 && idx < visibleLen {
-				shown = append(shown, idx)
-			}
-		}
-		if len(shown) > 0 {
-			text = highlightMatches(text, shown, active)
-		}
-	}
+	text, suffix = fitRowText(width, active, prefix, text, suffix, suffixW)
+	// Marks stop where the fade's dim style starts: an offset past it would
+	// land inside its escape code.
+	head, _, _ := strings.Cut(text, "\x1b")
+	text = highlightMatches(head, matched, active) + text[len(head):]
 	if dimText {
 		text = dim.Render(text)
 	}
 
 	line := prefix + text + suffix
-	if active {
-		if width > 0 {
-			if need := width - lipgloss.Width(line); need > 0 {
-				line += strings.Repeat(" ", need)
-			}
-		}
-		return rowActiveStyle.Render(line)
+	if !active {
+		return line
 	}
-	return line
+	line += strings.Repeat(" ", max(0, width-lipgloss.Width(line)))
+	return rowActiveStyle.Render(line)
+}
+
+// fitRowText cuts text to the cells that prefix and suffix leave in width.
+// When even an empty text leaves no room for the suffix, it drops the
+// suffix. A width <= 0 cuts nothing.
+func fitRowText(width int, active bool, prefix, text, suffix string, suffixW int) (string, string) {
+	if width <= 0 {
+		return text, suffix
+	}
+	avail := width - lipgloss.Width(prefix) - suffixW
+	if avail < 0 {
+		// Not enough room for the badge — drop it.
+		suffix = ""
+		avail = max(0, width-lipgloss.Width(prefix))
+	}
+	if active {
+		return truncateTail(text, avail), suffix
+	}
+	return truncateFade(text, avail), suffix
 }
 
 func renderHostLikeRow(width int, active bool, selected bool, host string, hasCfg bool, hidden bool, matchedIndexes []int) string {
