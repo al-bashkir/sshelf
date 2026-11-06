@@ -15,7 +15,8 @@ import (
 )
 
 // BuildCommands returns one ssh argv per host, applying settings in
-// precedence order: defaults → per-host override → group → modifyFn.
+// precedence order: defaults → per-host override → group → modifyFn. Through a
+// parent group, a host takes the group of its own that config.HostGroup finds.
 func BuildCommands(hosts []string, defaults config.Defaults, inv config.Inventory, group *config.Group, modifyFn func(*sshcmd.Settings)) [][]string {
 	base := sshcmd.FromDefaults(defaults)
 	out := make([][]string, 0, len(hosts))
@@ -25,7 +26,7 @@ func BuildCommands(hosts []string, defaults config.Defaults, inv config.Inventor
 			s = sshcmd.ApplyHost(s, hc)
 		}
 		if group != nil {
-			s = sshcmd.ApplyGroup(s, *group)
+			s = sshcmd.ApplyGroup(s, config.HostGroup(inv.Groups, *group, h))
 		}
 		if modifyFn != nil {
 			modifyFn(&s)

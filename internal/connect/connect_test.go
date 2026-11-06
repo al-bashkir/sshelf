@@ -92,3 +92,21 @@ func TestBuildCommandsMergeOrder(t *testing.T) {
 		t.Fatalf("without group: got %v", got)
 	}
 }
+
+// Through a parent group each host connects with the settings of the
+// subgroup that lists it, inherited from the parent where it sets none.
+func TestBuildCommandsUsesTheSubgroupOfEachHost(t *testing.T) {
+	inv := config.Inventory{Groups: []config.Group{
+		{Name: "prod", User: "admin", Port: 2222, Hosts: []string{"p1"}},
+		{Name: "db", Parent: "prod", User: "postgres", Hosts: []string{"d1"}},
+	}}
+	got := BuildCommands([]string{"p1", "d1", "typed"}, config.Defaults{Port: 22}, inv, &inv.Groups[0], nil)
+	want := [][]string{
+		{"ssh", "-p", "2222", "--", "admin@p1"},
+		{"ssh", "-p", "2222", "--", "postgres@d1"},
+		{"ssh", "-p", "2222", "--", "admin@typed"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+}

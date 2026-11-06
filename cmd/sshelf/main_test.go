@@ -36,7 +36,8 @@ func sshelf(t *testing.T, p *proc, dir, cmdline string) (code int, stdout, stder
 
 // fixture writes configs into a temp XDG dir. The default config loads
 // known_hosts and has groups web (w1, w2) and empty; inv/ lists hosts from
-// the inventory; bad/ and badinv/ do not load.
+// the inventory; nest/ has group top with no hosts over leaf (l1); bad/ and
+// badinv/ do not load.
 func fixture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -51,6 +52,8 @@ func fixture(t *testing.T) string {
 		"inv/hosts.toml":     "version = 1\n[[hosts]]\nhost = \"inv1\"\n[[groups]]\nname = \"g\"\nhosts = [\"inv2\"]\n",
 		"bad/config.toml":    "not = = toml\n",
 		"badinv/hosts.toml":  "version = 1\n[[groups]]\nname = \"bad/name\"\n",
+		"nest/config.toml":   "version = 1\n",
+		"nest/hosts.toml":    "version = 1\n[[groups]]\nname = \"top\"\nuser = \"admin\"\n[[groups]]\nname = \"leaf\"\nparent = \"top\"\nhosts = [\"l1\"]\n",
 	} {
 		p := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
@@ -143,6 +146,16 @@ func TestRunConnectHostExecsSSH(t *testing.T) {
 	p = &proc{execErr: errors.New("exec failed")}
 	if code, _, errOut := sshelf(t, p, fixture(t), "-no-tmux c h web1"); code != 1 || !strings.Contains(errOut, "exec failed") {
 		t.Fatalf("exec error: code=%d stderr=%q", code, errOut)
+	}
+}
+
+// A parent group connects the hosts of its subgroups with the settings they
+// inherit: top has no hosts of its own, and leaf takes its user.
+func TestRunConnectNestedGroup(t *testing.T) {
+	p := &proc{}
+	code, _, errOut := sshelf(t, p, fixture(t), "-no-tmux -config $D/nest/config.toml connect group top")
+	if want := [][]string{{"ssh", "--", "admin@l1"}}; code != 0 || !reflect.DeepEqual(p.execed, want) {
+		t.Fatalf("code=%d exec=%q stderr=%q, want exec %q", code, p.execed, errOut, want)
 	}
 }
 

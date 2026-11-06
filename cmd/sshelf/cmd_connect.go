@@ -33,7 +33,7 @@ func (c cli) connectGroup(name string, cfg config.Config, inv config.Inventory, 
 	if i < 0 {
 		return fmt.Errorf("group %q not found", name)
 	}
-	group := inv.Groups[i]
+	group := config.ResolveGroup(inv.Groups, inv.Groups[i])
 	if len(group.Hosts) == 0 {
 		return fmt.Errorf("group %q has no hosts", name)
 	}

@@ -353,7 +353,7 @@ func (m *groupsModel) connectAllCmd(oneWindow bool, remoteCmd string) tea.Cmd {
 		m.toast = toast{text: "invalid group", level: toastErr}
 		return nil
 	}
-	g := m.opts.Inventory.Groups[row.index]
+	g := config.ResolveGroup(m.opts.Inventory.Groups, m.opts.Inventory.Groups[row.index])
 	if len(g.Hosts) == 0 {
 		m.toast = toast{text: "group has no hosts", level: toastWarn}
 		return nil

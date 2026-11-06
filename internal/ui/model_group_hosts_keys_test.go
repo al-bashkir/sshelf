@@ -144,6 +144,18 @@ func TestGroupHostsConnect(t *testing.T) {
 			t.Fatalf("%q: quit=%v exec=%v toast=%q, want exec ssh alpha", k, isQuit(cmd), m.execCmd, m.toast.text)
 		}
 	}
+	t.Run("a subgroup connects with the settings of its parent", func(t *testing.T) {
+		m := groupHostsScreen(3, func(o *Options) {
+			o.NoTmux = false
+			o.Inventory.Groups = append(o.Inventory.Groups,
+				config.Group{Name: "top", User: "admin", Tmux: "force"}, config.Group{Name: "leaf", Parent: "top", Hosts: []string{"l1"}})
+		})
+		on(m, "enter")
+		// top's tmux=force opens a session; top's user reaches l1.
+		if n := len(m.execCmd); n < 2 || !slices.Equal(m.execCmd[:2], []string{"tmux", "new-session"}) || m.execCmd[n-1] != "admin@l1" {
+			t.Fatalf("exec %q, want tmux new-session ... admin@l1 (toast %q)", m.execCmd, m.toast.text)
+		}
+	})
 	t.Run("one window needs tmux", func(t *testing.T) {
 		m := groupHostsScreen(0, nil)
 		on(m, "o")

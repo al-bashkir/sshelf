@@ -130,6 +130,22 @@ func TestGroupsDelete(t *testing.T) {
 }
 
 func TestGroupsConnect(t *testing.T) {
+	t.Run("a parent connects the hosts of its subgroups", func(t *testing.T) {
+		m := groupsScreen(func(o *Options) {
+			o.Inventory.Groups = append(o.Inventory.Groups,
+				config.Group{Name: "top", User: "admin"}, config.Group{Name: "leaf", Parent: "top", Hosts: []string{"l1"}})
+		})
+		for range len(m.rows) {
+			if currentGroup(m) == "top" {
+				break
+			}
+			on(m, "j")
+		}
+		on(m, "C")
+		if want := []string{"ssh", "--", "admin@l1"}; !slices.Equal(m.execCmd, want) {
+			t.Fatalf("exec %q, want %q (toast %q)", m.execCmd, want, m.toast.text)
+		}
+	})
 	t.Run("all hosts of the group", func(t *testing.T) {
 		m := groupsScreen(nil)
 		m.toast = toast{text: "old", level: toastInfo}

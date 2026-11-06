@@ -52,6 +52,10 @@ func (c *connectActions) connect(hosts []string, opts Options, group *config.Gro
 		return nil
 	}
 
+	if group != nil {
+		g := config.ResolveGroup(opts.Inventory.Groups, *group) // open mode and panes inherit too
+		group = &g
+	}
 	defaults := opts.Config.Defaults
 	doConnect := func() tea.Cmd {
 		mode, inTmux := connect.Mode(defaults, group, opts.NoTmux)
