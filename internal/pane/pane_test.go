@@ -3,6 +3,7 @@ package pane
 import (
 	"bytes"
 	"io"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -145,6 +146,39 @@ func TestMainPassesUserExitThrough(t *testing.T) {
 	}
 	if got := Main([]string{"web01"}); got != 2 {
 		t.Fatalf("Main(bad args)=%d want=2", got)
+	}
+}
+
+// setStdin points os.Stdin at f for one test, so readKey never reads the real terminal.
+func setStdin(t *testing.T, f *os.File) {
+	t.Helper()
+	old := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() { os.Stdin = old })
+}
+
+// pipeStdin makes os.Stdin a pipe that holds input and then ends.
+func pipeStdin(t *testing.T, input string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	if _, err := w.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	setStdin(t, r)
+}
+
+func TestReadKeyFromPipe(t *testing.T) {
+	pipeStdin(t, "r") // not a terminal: no raw mode, read anyway
+	if k, err := readKey(); k != 'r' || err != nil {
+		t.Fatalf("readKey=%q,%v want 'r',nil", k, err)
+	}
+	if k, err := readKey(); k != 0 || err != io.EOF {
+		t.Fatalf("readKey at end=%q,%v want 0,EOF", k, err)
 	}
 }
 
