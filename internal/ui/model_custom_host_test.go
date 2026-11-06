@@ -5,15 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/al-bashkir/sshelf/internal/config"
-
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // customHost opens the connect prompt for group index gi (-1: no group),
 // opened from Groups, in a 60x12 modal.
 func customHost(gi int) *customHostModel {
-	m := newCustomHostModel(Options{Config: config.DefaultConfig()}, gi, screenGroups)
+	m := newCustomHostModel(gi, screenGroups)
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: 12})
 	return m
 }

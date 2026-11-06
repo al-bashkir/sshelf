@@ -460,9 +460,6 @@ func (m *appModel) commitInventory(newInv config.Inventory) error {
 	if m.gp != nil {
 		m.gp.opts.Inventory = newInv
 	}
-	if m.customHost != nil {
-		m.customHost.opts.Inventory = newInv
-	}
 	return nil
 }
 

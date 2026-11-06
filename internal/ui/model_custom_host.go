@@ -9,12 +9,10 @@ import (
 )
 
 type customHostModel struct {
-	opts        Options
 	parentCrumb string
 
 	returnTo   screen
-	groupIndex int
-	groupName  string
+	groupIndex int // -1: no group; Ctrl+A then asks for one
 
 	width  int
 	height int
@@ -24,12 +22,7 @@ type customHostModel struct {
 	keymap keyMap
 }
 
-func newCustomHostModel(opts Options, groupIndex int, returnTo screen) *customHostModel {
-	name := ""
-	if groupIndex >= 0 && groupIndex < len(opts.Inventory.Groups) {
-		name = strings.TrimSpace(opts.Inventory.Groups[groupIndex].Name)
-	}
-
+func newCustomHostModel(groupIndex int, returnTo screen) *customHostModel {
 	in := textinput.New()
 	in.CharLimit = 512
 	in.Width = 60
@@ -40,10 +33,8 @@ func newCustomHostModel(opts Options, groupIndex int, returnTo screen) *customHo
 	setSearchFocused(&in, true)
 
 	return &customHostModel{
-		opts:       opts,
 		returnTo:   returnTo,
 		groupIndex: groupIndex,
-		groupName:  name,
 		input:      in,
 		keymap:     defaultKeyMap(),
 	}
@@ -60,37 +51,42 @@ func (m *customHostModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.Width = max(10, innerW-len(m.input.Prompt))
 		return m, nil
 	case tea.KeyMsg:
-		if key.Matches(msg, m.keymap.Esc) {
-			return m, func() tea.Msg { return customHostCancelMsg{} }
-		}
-		if key.Matches(msg, m.keymap.SelectAll) {
-			m.toast = toast{}
-			hosts := strings.Fields(strings.TrimSpace(m.input.Value()))
-			if len(hosts) == 0 {
-				m.toast = toast{text: "host required", level: toastWarn}
-				return m, nil
-			}
-			if m.groupIndex >= 0 {
-				return m, func() tea.Msg { return customHostDoneMsg{returnTo: m.returnTo, groupIndex: m.groupIndex, hosts: hosts} }
-			}
-			return m, func() tea.Msg { return customHostPickGroupMsg{returnTo: m.returnTo, hosts: hosts} }
-		}
-		if msg.String() == "enter" {
-			m.toast = toast{}
-			hosts := strings.Fields(strings.TrimSpace(m.input.Value()))
-			if len(hosts) == 0 {
-				m.toast = toast{text: "host required", level: toastWarn}
-				return m, nil
-			}
-			return m, func() tea.Msg {
-				return customHostConnectMsg{returnTo: m.returnTo, groupIndex: m.groupIndex, hosts: hosts}
-			}
+		switch {
+		case key.Matches(msg, m.keymap.Esc):
+			return m, msgCmd(customHostCancelMsg{})
+		case key.Matches(msg, m.keymap.SelectAll):
+			return m, m.submit(m.addMsg)
+		case msg.String() == "enter":
+			return m, m.submit(m.connectMsg)
 		}
 	}
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	return m, cmd
+}
+
+// submit sends send(hosts) for the typed hosts; with none it warns.
+func (m *customHostModel) submit(send func(hosts []string) tea.Msg) tea.Cmd {
+	m.toast = toast{}
+	hosts := strings.Fields(m.input.Value())
+	if len(hosts) == 0 {
+		m.toast = toast{text: "host required", level: toastWarn}
+		return nil
+	}
+	return msgCmd(send(hosts))
+}
+
+func (m *customHostModel) connectMsg(hosts []string) tea.Msg {
+	return customHostConnectMsg{returnTo: m.returnTo, groupIndex: m.groupIndex, hosts: hosts}
+}
+
+// addMsg adds hosts to the group, or asks for a group when none is set.
+func (m *customHostModel) addMsg(hosts []string) tea.Msg {
+	if m.groupIndex >= 0 {
+		return customHostDoneMsg{returnTo: m.returnTo, groupIndex: m.groupIndex, hosts: hosts}
+	}
+	return customHostPickGroupMsg{returnTo: m.returnTo, hosts: hosts}
 }
 
 func (m *customHostModel) View() string {

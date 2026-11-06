@@ -258,7 +258,7 @@ func (msg defaultsToastExpireMsg) apply(m *appModel) tea.Cmd {
 // Custom host: hosts the user types.
 
 func (msg openCustomHostMsg) apply(m *appModel) tea.Cmd {
-	m.customHost = newCustomHostModel(m.opts, msg.groupIndex, msg.returnTo)
+	m.customHost = newCustomHostModel(msg.groupIndex, msg.returnTo)
 	// On Groups the crumb names the group, since m.breadcrumb() only gives
 	// "Groups" there. On Group hosts m.breadcrumb() already names it. Other
 	// screens do not carry a meaningful groupIndex.
