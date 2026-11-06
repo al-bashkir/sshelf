@@ -462,7 +462,7 @@ func joinHeader(width int, left, right string) string {
 		return left + " " + right
 	}
 	if right == "" {
-		return left
+		return lipgloss.NewStyle().MaxWidth(width).Render(left)
 	}
 
 	rw := lipgloss.Width(right)

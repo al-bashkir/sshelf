@@ -105,10 +105,21 @@ func TestStylJoinHeader(t *testing.T) {
 		{3, "abc", "xyz", "xyz"},  // the right part fills it
 		{3, "abc", "wxyz", "wxy"}, // the right part cut
 		{10, "ab", "", "ab"},
+		{5, "abcdef", "", "abcde"}, // no right part: the left part cut too
 	} {
 		if got := joinHeader(c.width, c.left, c.right); got != c.want {
 			t.Errorf("joinHeader(%d, %q, %q) = %q, want %q", c.width, c.left, c.right, got, c.want)
 		}
+	}
+}
+
+// A long title is cut to one line, so the modal keeps the size it is given.
+func TestStylLongTitleKeepsTheModalSize(t *testing.T) {
+	m := hostPicker() // a 60x20 modal
+	m.parentCrumb = "Groups > " + strings.Repeat("x", 60)
+	lines := strings.Split(plainView(m), "\n")
+	if len(lines) != 20 || lines[1] != "│ Groups > "+strings.Repeat("x", 47)+" │" { // 56 columns inside
+		t.Fatalf("%d lines, want 20 with the title cut on line 2:\n%s", len(lines), strings.Join(lines, "\n"))
 	}
 }
 
