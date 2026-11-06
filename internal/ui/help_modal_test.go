@@ -2,12 +2,14 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/al-bashkir/sshelf/internal/config"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -32,8 +34,10 @@ func TestHelpSectionsSkipDisabledKeys(t *testing.T) {
 }
 
 func TestHelpShowsEveryKeyWhenItFits(t *testing.T) {
-	screenShows(t, hostsHelp(100, 80),
-		[]string{"Hosts keybindings", "  Navigation", "q  quit", "Esc/? close  j/k scroll"}, "%")
+	for _, h := range []int{80, 43} { // 43: 39 lines, border and padding
+		screenShows(t, hostsHelp(100, h),
+			[]string{"Hosts keybindings", "  Navigation", "q  quit", "Esc/? close  j/k scroll"}, "%")
+	}
 }
 
 func TestHelpScrolls(t *testing.T) {
@@ -57,4 +61,19 @@ func TestHelpBeforeTheWindowSize(t *testing.T) {
 	m := newHostsModel(Options{Config: config.DefaultConfig(), Hosts: []string{"alpha"}})
 	on(m, "?")
 	screenShows(t, m, []string{"Hosts\n\nNavigation", "q  quit"}, "keybindings")
+}
+
+func TestHelpFitsTheWindow(t *testing.T) {
+	for _, s := range [][2]int{{100, 80}, {100, 43}, {100, 42}, {100, 30}, {100, 12}, {32, 12}, {31, 12}, {26, 12}, {20, 12}} {
+		lines := strings.Split(plainView(hostsHelp(s[0], s[1])), "\n")
+		if len(lines) > s[1] {
+			t.Errorf("%dx%d: help is %d rows tall", s[0], s[1], len(lines))
+		}
+		for _, l := range lines {
+			if w := lipgloss.Width(l); w > s[0] {
+				t.Errorf("%dx%d: help is %d columns wide", s[0], s[1], w)
+				break
+			}
+		}
+	}
 }
