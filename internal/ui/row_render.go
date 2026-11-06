@@ -97,7 +97,10 @@ func composeRow(width int, active bool, prefix, text, suffix string, suffixW int
 		return line
 	}
 	line += strings.Repeat(" ", max(0, width-lipgloss.Width(line)))
-	return rowActiveStyle.Render(line)
+	// A reset inside the row (after a marked letter) also ends the bar, so
+	// start the bar again after each one.
+	bar, _, _ := strings.Cut(rowActiveStyle.Render("x"), "x")
+	return rowActiveStyle.Render(strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bar))
 }
 
 // fitRowText cuts text to the cells that prefix and suffix leave in width.

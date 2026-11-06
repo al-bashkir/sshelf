@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -269,7 +270,7 @@ func TestRowpColourMarksFuzzyLettersOfMultiByteNames(t *testing.T) {
 	})
 	g := groupsScreen(func(o *Options) { o.Inventory.Groups = append(o.Inventory.Groups, config.Group{Name: "прод"}) })
 	on(g, "/", "о", "д")
-	if v := g.View(); !strings.Contains(v, "▸ пр"+ul("од")) {
+	if v := g.View(); !strings.Contains(v, "▸ пр"+ul("о")+rowpOpen(rowActiveStyle)+ul("д")) {
 		t.Fatalf("groups screen does not mark %q in the row:\n%q", "од", v)
 	}
 }
@@ -304,6 +305,7 @@ func TestRowpColour(t *testing.T) {
 	}
 	hl, ul := checkedStyle.Render, lipgloss.NewStyle().Underline(true).Render
 	act := func(s string, w int) string { return rowActiveStyle.Render(rowpPad(s, w)) }
+	bar := rowpOpen(rowActiveStyle) // the active row sets the bar again after each reset
 	box, tick := uncheckedStyle.Render("◻"), checkedStyle.Render("◼")
 	cfg, two := " "+badgeCfgStyle.Render("⚙"), " "+badgeCountStyle.Render("2")
 	rowpCheck(t, false, []rowpCase{
@@ -327,21 +329,117 @@ func TestRowpColour(t *testing.T) {
 		{"row out of range matches", composeRow(20, false, "  ", "alpha", "", 0, []int{-1, 5}, false), "  alpha"},
 		{"row match before the fade", composeRow(6, false, "  ", "alpha", "", 0, []int{0}, false),
 			"  " + hl("a") + "l" + dim.Render("p…")},
-		{"active row match", composeRow(20, true, "▸ ", "alpha", "", 0, []int{0}, false), act("▸ "+ul("a")+"lpha", 20)},
-		{"active row match on the cut", composeRow(6, true, "▸ ", "alpha", "", 0, []int{2, 3}, false), act("▸ al"+ul("p…"), 6)},
+		{"active row match", composeRow(20, true, "▸ ", "alpha", "", 0, []int{0}, false), act("▸ "+ul("a")+bar+"lpha", 20)},
+		{"active row match on the cut", composeRow(6, true, "▸ ", "alpha", "", 0, []int{2, 3}, false), act("▸ al"+ul("p")+bar+ul("…")+bar, 6)},
 		{"dim row", composeRow(20, false, "  ", "alpha", "", 0, nil, true), "  " + dim.Render("alpha")},
-		{"dim active row", composeRow(20, true, "▸ ", "alpha", "", 0, nil, true), act("▸ "+dim.Render("alpha"), 20)},
+		{"dim active row", composeRow(20, true, "▸ ", "alpha", "", 0, nil, true), act("▸ "+dim.Render("alpha")+bar, 20)},
 
 		{"host", renderHostLikeRow(20, false, false, "alpha", false, false, []int{0}), "  " + box + " " + hl("a") + "lpha"},
 		{"host selected", renderHostLikeRow(20, false, true, "alpha", false, false, nil), "  " + tick + " alpha"},
 		{"host config", renderHostLikeRow(20, false, false, "alpha", true, false, nil), "  " + box + " alpha" + cfg},
 		{"host hidden", renderHostLikeRow(20, false, false, "alpha", false, true, []int{0}), "  " + box + " " + dim.Render("⊘ alpha")},
-		{"host active", renderHostLikeRow(20, true, true, "alpha", true, false, []int{1}), act("▸ ◼ a"+ul("l")+"pha  ⚙ ", 20)},
+		{"host active", renderHostLikeRow(20, true, true, "alpha", true, false, []int{1}), act("▸ ◼ a"+ul("l")+bar+"pha  ⚙ ", 20)},
 		{"host hidden active", renderHostLikeRow(20, true, false, "alpha", false, true, []int{0}), act("▸ ◻ ⊘ alpha", 20)},
 
 		{"group", renderGroupRow(20, false, "db", 2, []int{0}), "  " + hl("d") + "b" + two},
-		{"group active", renderGroupRow(20, true, "db", 2, []int{1}), act("▸ d"+ul("b")+"  2 ", 20)},
+		{"group active", renderGroupRow(20, true, "db", 2, []int{1}), act("▸ d"+ul("b")+bar+"  2 ", 20)},
 		{"simple", renderSimpleRow(20, false, "alpha", []int{2}), "  al" + hl("p") + "ha"},
 		{"simple active", renderSimpleRow(20, true, "alpha", nil), act("▸ alpha", 20)},
 	})
+}
+
+// rowpCell is one cell a terminal draws: its text and the SGR codes set
+// since the last reset.
+type rowpCell struct{ text, sgr string }
+
+// rowpCells decodes s into the cells a terminal draws.
+func rowpCells(s string) []rowpCell {
+	var cells []rowpCell
+	var sgr string
+	var state byte
+	for s != "" {
+		seq, w, n, next := ansi.DecodeSequence(s, state, nil)
+		switch {
+		case w > 0:
+			cells = append(cells, rowpCell{seq, sgr})
+		case seq == "\x1b[0m" || seq == "\x1b[m":
+			sgr = ""
+		case strings.HasPrefix(seq, "\x1b[") && strings.HasSuffix(seq, "m"):
+			sgr += seq
+		}
+		s, state = s[n:], next
+	}
+	return cells
+}
+
+// rowpOpen is the SGR code that st starts its text with.
+func rowpOpen(st lipgloss.Style) string {
+	open, _, _ := strings.Cut(st.Render("x"), "x")
+	return open
+}
+
+// rowpBarCells fails t when a cell is off the active row's bar, and gives
+// the text of the underlined cells.
+func rowpBarCells(t *testing.T, name string, cells []rowpCell) string {
+	t.Helper()
+	bar, ul := rowpOpen(rowActiveStyle), rowpOpen(lipgloss.NewStyle().Underline(true))
+	var marked string
+	for i, c := range cells {
+		if !strings.Contains(c.sgr, bar) {
+			t.Errorf("%s: cell %d %q is off the bar %q: it has %q", name, i, c.text, bar, c.sgr)
+			return marked
+		}
+		if strings.Contains(c.sgr, ul) {
+			marked += c.text
+		}
+	}
+	return marked
+}
+
+// The cursor row is one solid bar: every cell to the full width, the
+// marked letters too, has the bar's colours. The reset that ended a marked
+// letter used to end the bar there too.
+func TestRowpColourActiveRowKeepsTheBar(t *testing.T) {
+	if !rowpInColour(t) {
+		return
+	}
+	for _, c := range []struct {
+		name, row, marked string
+		width             int
+	}{
+		{"no marks", renderSimpleRow(20, true, "alpha", nil), "", 20},
+		{"two marks", renderSimpleRow(20, true, "alpha", []int{0, 4}), "aa", 20},
+		{"mark before the badge", renderGroupRow(20, true, "db", 2, []int{1}), "b", 20},
+		{"host with a badge", renderHostLikeRow(20, true, true, "alpha", true, false, []int{1}), "l", 20},
+		{"hidden host drops marks", renderHostLikeRow(20, true, false, "alpha", false, true, []int{0}), "", 20},
+		{"mark on the cut", composeRow(6, true, "▸ ", "alpha", "", 0, []int{2, 3}, false), "p…", 6},
+		{"cyrillic", renderSimpleRow(20, true, "прод", rowpMarks("од", "прод")), "од", 20},
+		{"wide letters", renderSimpleRow(20, true, "日本語", rowpMarks("本", "日本語")), "本", 20},
+	} {
+		if w := lipgloss.Width(c.row); w != c.width {
+			t.Errorf("%s: row is %d cells, want %d", c.name, w, c.width)
+		}
+		if got := rowpBarCells(t, c.name, rowpCells(c.row)); got != c.marked {
+			t.Errorf("%s: marked %q, want %q\nrow %q", c.name, got, c.marked, c.row)
+		}
+	}
+
+	g := groupsScreen(nil)
+	on(g, "/", "d", "b")
+	for _, l := range strings.Split(g.View(), "\n") {
+		cells := rowpCells(l)
+		at := slices.IndexFunc(cells, func(c rowpCell) bool { return c.text == "▸" })
+		if at < 0 {
+			continue
+		}
+		row := cells[at:]
+		if end := slices.IndexFunc(row, func(c rowpCell) bool { return c.text == "│" }); end >= 0 {
+			row = row[:end]
+		}
+		if got := rowpBarCells(t, "groups screen", row); got != "db" || len(row) < 20 {
+			t.Errorf("groups screen: marked %q in %d cells, want %q in 20 or more\nline %q", got, len(row), "db", l)
+		}
+		return
+	}
+	t.Fatalf("groups screen has no cursor row:\n%s", plainView(g))
 }
