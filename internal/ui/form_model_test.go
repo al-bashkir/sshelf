@@ -267,23 +267,24 @@ func TestPickerOverlayDropsBelowOrFlipsAbove(t *testing.T) {
 		t.Fatal("no picker open, but the rows changed")
 	}
 	formKeys(f, "j", "enter")
-	popup := strings.Split(f.picker.View(28), "\n") // 5 lines, 22 wide
-	const col = 13                                  // indent 2 + label 10 + 1
+	const col = 13 // indent 2 + label 10 + 1
 	for _, c := range []struct {
-		name            string
-		bg              []string
-		focusRow, first int
+		name                   string
+		bg                     []string
+		focusRow, first, shown int // shown: the options the box has room for, of 3
 	}{
-		{"room below", rows(10, strings.Repeat("-", 40)), 1, 2},
-		{"flip above", rows(10, strings.Repeat("-", 40)), 8, 3},
-		{"little room either way", rows(6, strings.Repeat("-", 40)), 2, 3},
-		{"flip above, top cut", rows(7, strings.Repeat("-", 40)), 4, -1},
-		{"empty rows", rows(10, ""), 1, 2},
-		{"short rows", rows(10, "x"), 1, 2},
-		{"one row short below: flip", rows(10, strings.Repeat("-", 40)), 5, 0},
-		{"just fits below: stay", rows(12, strings.Repeat("-", 40)), 6, 7},
-		{"short both ways, equal room: stay", rows(9, strings.Repeat("-", 40)), 4, 5},
+		{"room below", rows(10, strings.Repeat("-", 40)), 1, 2, 3},
+		{"flip above", rows(10, strings.Repeat("-", 40)), 8, 3, 3},
+		{"little room either way: fewer options", rows(6, strings.Repeat("-", 40)), 2, 3, 1},
+		{"flip above with fewer options", rows(7, strings.Repeat("-", 40)), 4, 0, 2},
+		{"empty rows", rows(10, ""), 1, 2, 3},
+		{"short rows", rows(10, "x"), 1, 2, 3},
+		{"one row short below: flip", rows(10, strings.Repeat("-", 40)), 5, 0, 3},
+		{"just fits below: stay", rows(12, strings.Repeat("-", 40)), 6, 7, 3},
+		{"short both ways, equal room: stay", rows(9, strings.Repeat("-", 40)), 4, 5, 2},
+		{"no room: one option still shows", rows(4, strings.Repeat("-", 40)), 1, 2, 1},
 	} {
+		popup := strings.Split(f.picker.View(28, c.shown), "\n") // 22 wide
 		got := f.overlayPickerOnVisible(c.bg, c.focusRow, 40)
 		if len(got) != len(c.bg) {
 			t.Fatalf("%s: %d rows, want %d", c.name, len(got), len(c.bg))
@@ -309,7 +310,7 @@ func TestPickerOverlayDropsBelowOrFlipsAbove(t *testing.T) {
 }
 
 func TestOptionPickerView(t *testing.T) {
-	view := func(p *optionPickerPopup, maxW int) string { return ansi.Strip(p.View(maxW)) }
+	view := func(p *optionPickerPopup, maxW int) string { return ansi.Strip(p.View(maxW, 10)) }
 	modes := opts("auto", "force", "never")
 	for _, c := range []struct {
 		name string

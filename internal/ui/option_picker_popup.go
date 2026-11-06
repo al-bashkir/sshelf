@@ -57,9 +57,11 @@ func (p *optionPickerPopup) selected() string {
 }
 
 // View renders the popup as a box-drawing framed list.
-// maxW is the maximum width available (from the parent form).
+// maxW is the maximum width available (from the parent form). The box shows
+// at most maxRows options, a window centered on the cursor where the ends of
+// the list allow.
 // formModel.openPicker opens it only for a field with options.
-func (p *optionPickerPopup) View(maxW int) string {
+func (p *optionPickerPopup) View(maxW, maxRows int) string {
 	// Measure the widest option display text.
 	widest := lipgloss.Width(p.label)
 	for _, opt := range p.options {
@@ -78,9 +80,10 @@ func (p *optionPickerPopup) View(maxW int) string {
 	lines := make([]string, 0, len(p.options)+4)
 	lines = append(lines, focusedBoxTitleTop(totalW, p.label))
 
-	for i, opt := range p.options {
+	first := max(0, min(p.cursor-maxRows/2, len(p.options)-maxRows))
+	for i, opt := range p.options[first:min(len(p.options), first+maxRows)] {
 		text := "  " + opt.Display
-		if i == p.cursor {
+		if first+i == p.cursor {
 			// Fill to width for highlight bar.
 			text = "▸ " + opt.Display
 			text = rowActiveStyle.Render(text + strings.Repeat(" ", max(0, innerW-lipgloss.Width(text))))

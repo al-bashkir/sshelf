@@ -417,12 +417,13 @@ func (m *formModel) overlayPickerOnVisible(visible []string, focusRow, innerW in
 	if popupMaxW < 20 {
 		popupMaxW = min(innerW, 20)
 	}
-	popup := m.picker.View(popupMaxW)
-	popupLines := strings.Split(strings.TrimRight(popup, "\n"), "\n")
-
 	// Decide direction: prefer below, flip above when not enough room.
 	roomBelow := len(visible) - focusRow - 1
 	roomAbove := focusRow
+
+	// The box takes the larger side, its two borders included.
+	popup := m.picker.View(popupMaxW, max(1, max(roomBelow, roomAbove)-2))
+	popupLines := strings.Split(strings.TrimRight(popup, "\n"), "\n")
 
 	startRow := focusRow + 1 // below by default
 	if len(popupLines) > roomBelow && roomAbove > roomBelow {

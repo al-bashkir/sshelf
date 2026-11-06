@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -239,4 +240,20 @@ func TestFormFocusedFieldTurnedDisabledLosesTheMark(t *testing.T) {
 	if !slices.Equal(got[2:5], want) || focusLine != 2 {
 		t.Fatalf("focus line %d, rows\n%q\nwant focus 2, rows 2-4\n%q", focusLine, got, want)
 	}
+}
+
+// A picker with more options than the form has rows scrolls: the cursor
+// stays on screen, and the box stays inside the form.
+func TestPickerScrollsLongOptionLists(t *testing.T) {
+	groups := make([]config.Group, 30)
+	for i := range groups {
+		groups[i] = config.Group{Name: fmt.Sprintf("g%02d", i)}
+	}
+	m := newGroupFormModel(-1, config.Group{}, groups, config.DefaultConfig().Defaults)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	sendKeys(m, "j", "enter") // the parent picker, on none
+	screenShows(t, m, []string{"▸ none", "g00"}, "g29")
+	sendKeys(m, "k") // wraps to the last group
+	// The box stays full at the end of the list: g19 to g29.
+	screenShows(t, m, []string{"g19", "▸ g29", "└────────────────────┘"}, "▸ none", "│  g00")
 }
