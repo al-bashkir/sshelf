@@ -156,6 +156,13 @@ func TestSettingsDisabledAccent(t *testing.T) {
 		"  ╰ overridden by nord theme")
 }
 
+// A picker value from the config that the options do not list shows as
+// it is, trimmed; an empty one shows as default.
+func TestSettingsPickerShowsAnUnlistedValue(t *testing.T) {
+	m := frlSettings(func(d *config.Defaults) { d.Tmux, d.OpenMode = "", " weird " })
+	frlShows(t, m, "  Tmux mode:       default ▾", "  Open mode:       weird ▾")
+}
+
 // The group form: picker displays, the sub-modal's default and value, and
 // no help line on fields without help text.
 func TestGroupFormRowsShowPickersAndSubModal(t *testing.T) {
