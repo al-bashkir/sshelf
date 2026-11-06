@@ -223,6 +223,7 @@ hidden = false  # set true to hide from the list (toggle with Ctrl+H)
 [[groups]]
 name = "prod"
 hosts = ["web1.prod.example.com", "web2.prod.example.com", "[10.0.0.1]:2222"]
+parent = ""              # optional: put this group inside another group
 user = "deploy"
 port = 22
 identity_file = "~/.ssh/prod_ed25519"
@@ -240,6 +241,8 @@ open_mode = "tmux-pane"  # override open mode for this group
 ```
 
 For single-host connections, SSH settings are `defaults` → matching `[[hosts]]` override. For group connections, they are `defaults` → matching `[[hosts]]` override → `[[groups]]` override.
+
+Groups can sit inside groups: set `parent` to the name of another group, or use the `Parent` picker in the group form. A subgroup inherits the settings it leaves empty from its parent, and a parent group connects the hosts of all its subgroups.
 
 ## Limits
 

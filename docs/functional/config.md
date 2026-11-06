@@ -69,6 +69,7 @@ hidden = false           # when true, hides this host from the Hosts list
 
 [[groups]]
 name = "prod"
+parent = ""         # optional: name of the group this one sits in; omit for a top-level group
 user = "admin"
 port = 22
 identity_file = "~/.ssh/prod_ed25519"
@@ -95,6 +96,15 @@ Settings merge (for an SSH connection):
 1) defaults (from config.toml)
 2) host overrides (`[[hosts]]` exact match, from hosts.toml)
 3) group overrides (if connecting via group, from hosts.toml); a group setting wins over a host setting
+
+Nested groups:
+
+- A group with `parent = "<name>"` is a subgroup of that group. A group has at most one parent.
+- A subgroup inherits each setting that it leaves empty from its nearest ancestor that sets it.
+- Connecting to a group opens its own hosts and the hosts of all its subgroups, each host once.
+- Through a parent group, each host uses the settings of the first group in tree order (the group itself first) that lists it.
+- Load and save refuse a parent that does not exist or that leads back to the group.
+- Renaming a group updates the `parent` of its subgroups. Deleting a group moves its subgroups to its own parent.
 
 Notes:
 

@@ -194,18 +194,20 @@ func LoadInventory(path string) (Inventory, string, error) {
 	if inv.Version == 0 {
 		inv.Version = 1
 	}
-	for _, g := range inv.Groups {
-		if err := ValidateGroupName(g.Name); err != nil {
-			return DefaultInventory(), used, fmt.Errorf("hosts: group %q: %w", g.Name, err)
-		}
+	if err := checkGroups(inv.Groups); err != nil {
+		return DefaultInventory(), used, fmt.Errorf("hosts: %w", err)
 	}
 	return inv, used, nil
 }
 
 // SaveInventory atomically writes the inventory to path. It fails with
-// ErrChangedOnDisk if the file changed since inv was loaded or saved.
+// ErrChangedOnDisk if the file changed since inv was loaded or saved, and
+// refuses groups that load would refuse.
 // If path is empty, defaultHostsPath is used.
 func SaveInventory(path string, inv *Inventory) (string, error) {
+	if err := checkGroups(inv.Groups); err != nil {
+		return "", err
+	}
 	inv.Version = 1
 	return saveTOML(path, defaultHostsPath, ".hosts.toml.*", *inv, &inv.sum)
 }

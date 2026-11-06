@@ -81,6 +81,7 @@ type Defaults struct {
 
 type Group struct {
 	Name          string   `toml:"name"`
+	Parent        string   `toml:"parent,omitempty"` // the group this one sits in; "" for a top-level group
 	User          string   `toml:"user"`
 	Port          int      `toml:"port"`
 	IdentityFile  string   `toml:"identity_file"`
