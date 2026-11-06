@@ -32,9 +32,28 @@ func TestConnectQuestionTakesEveryKey(t *testing.T) {
 }
 
 func TestConnectAsksOnlyAboveTheThreshold(t *testing.T) {
-	m := hostsScreen(func(o *Options) { o.Config.Defaults.ConnectConfirmThreshold = 3 })
-	on(m, "ctrl+a", "enter")
-	screenShows(t, m, nil, "Connect 3 hosts?")
+	seven := []string{"h1", "h2", "h3", "h4", "h5", "h6", "h7"}
+	for _, c := range []struct {
+		threshold int
+		hosts     []string
+		asks      bool
+	}{
+		{3, nil, false},   // 3 hosts, not more than 3
+		{0, seven, false}, // 0 never asks
+		{-1, nil, false},  // unset: 5
+		{-1, seven, true},
+	} {
+		m := hostsScreen(func(o *Options) {
+			o.Config.Defaults.ConnectConfirmThreshold = c.threshold
+			if c.hosts != nil {
+				o.Hosts = c.hosts
+			}
+		})
+		on(m, "ctrl+a", "enter")
+		if asks := strings.Contains(plainView(m), "hosts?"); asks != c.asks {
+			t.Errorf("threshold %d, %d hosts: asks %v, want %v", c.threshold, len(m.allHosts), asks, c.asks)
+		}
+	}
 }
 
 func TestConnectGoesToTheSelectedHost(t *testing.T) {

@@ -28,11 +28,14 @@ type connectActions struct {
 func (c *connectActions) IsQuitting() bool  { return c.quitting }
 func (c *connectActions) ExecCmd() []string { return c.execCmd }
 
-func connectThreshold(d config.Defaults) int {
-	if d.ConnectConfirmThreshold < 0 {
-		return 5
+// askBeforeConnect reports whether connecting n hosts needs a yes first:
+// above the threshold, 5 when it is unset (negative), never when it is 0.
+func askBeforeConnect(d config.Defaults, n int) bool {
+	t := d.ConnectConfirmThreshold
+	if t < 0 {
+		t = 5
 	}
-	return d.ConnectConfirmThreshold
+	return t > 0 && n > t
 }
 
 // connect dispatches hosts. oneWindow forces every host into a single tmux
@@ -68,7 +71,7 @@ func (c *connectActions) connect(hosts []string, opts Options, group *config.Gro
 		return cmd
 	}
 
-	if len(hosts) > connectThreshold(defaults) {
+	if askBeforeConnect(defaults, len(hosts)) {
 		c.confirmConnect = true
 		c.confirmConnectCount = len(hosts)
 		c.confirmConnectHosts = hosts
