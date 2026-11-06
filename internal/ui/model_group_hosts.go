@@ -162,7 +162,7 @@ func (m *groupHostsModel) View() string {
 	}
 	crumb := dim.Render("Groups >") + " " + headerStyle.Render(m.group.Name)
 	if m.confirmRemove {
-		dot := statusDot(true, false)
+		dot := statusDot(false)
 		return renderBreadcrumbTabBox(m.width, m.height, crumb, searchHeader(&m.search, m.width, dot), dot, m.removeView(), "")
 	}
 	right := m.status()
@@ -179,7 +179,7 @@ func (m *groupHostsModel) status() string {
 	if !m.toast.empty() {
 		return renderToast(m.toast)
 	}
-	right := statusDot(true, false) + m.hostCount(len(m.allHosts))
+	right := statusDot(false) + m.hostCount(len(m.allHosts))
 	if n := len(m.selected); n > 0 {
 		right += "   " + badgeSelStyle.Render(fmt.Sprintf("%d selected", n))
 	}

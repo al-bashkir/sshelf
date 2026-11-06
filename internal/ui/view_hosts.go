@@ -26,7 +26,7 @@ func (m *hostsModel) status() string {
 		return statusWarn.Render(spinnerFrame())
 	}
 	hasWarn := m.opts.SkippedLines > 0 || len(m.opts.LoadErrors) > 0
-	right := statusDot(true, hasWarn)
+	right := statusDot(hasWarn)
 	if hasWarn {
 		right += dim.Render(" load warnings")
 	}

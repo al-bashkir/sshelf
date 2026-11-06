@@ -226,7 +226,7 @@ func (m *groupsModel) View() string {
 	if m.confirmQuit {
 		return renderQuitConfirm(m.width, m.height)
 	}
-	count := statusDot(true, false) + "   " + dim.Render(fmt.Sprintf("%d groups", len(m.allRows)))
+	count := statusDot(false) + "   " + dim.Render(fmt.Sprintf("%d groups", len(m.allRows)))
 	if m.confirmDelete {
 		return renderMainTabBox(m.width, m.height, 1, searchHeader(&m.search, m.width, count), count, m.deleteView())
 	}

@@ -396,7 +396,7 @@ func (m *defaultsFormModel) View() string {
 	if m.form.isDirty() {
 		headRight = lipgloss.NewStyle().Foreground(cWarn).Render("[mod]") + " "
 	}
-	headRight += statusDot(true, false)
+	headRight += statusDot(false)
 
 	return renderMainTabBox(m.width, m.height, 2, headLeft, headRight, strings.Join(contentLines, "\n"))
 }

@@ -581,8 +581,8 @@ func formSection(label string, width int) string {
 }
 
 // statusDot returns a colored dot for status display.
-func statusDot(ok bool, hasWarnings bool) string {
-	if !ok || hasWarnings {
+func statusDot(hasWarnings bool) string {
+	if hasWarnings {
 		return statusWarn.Render("●")
 	}
 	return statusOK.Render("●")
