@@ -48,17 +48,17 @@ func formScreenCases() []formScreenCase {
 		{
 			name: "group",
 			new: func() tea.Model {
-				m := newGroupFormModel(1, config.Group{Name: "prod", PaneBorderFmt: "#G"}, defs)
+				m := newGroupFormModel(1, config.Group{Name: "prod", PaneBorderFmt: "#G"}, nil, defs)
 				m.parentCrumb = "Groups"
 				return m
 			},
-			toUser: []string{"j"}, breakKeys: []string{"i", "backspace", "backspace", "backspace", "backspace", "esc"},
+			toUser: []string{"j", "j"}, breakKeys: []string{"i", "backspace", "backspace", "backspace", "backspace", "esc"}, // j j: past parent
 			badValue: "name required", fixKeys: []string{"i", "p", "esc"},
 			savedUser: func(msg tea.Msg) (string, bool) {
 				s, ok := msg.(groupFormSaveMsg)
 				return s.group.User, ok && s.index == 1
 			},
-			toPicker:     []string{"j", "j", "j", "j", "j", "j"}, // open_mode
+			toPicker:     []string{"j", "j", "j", "j", "j", "j", "j"}, // open_mode
 			cancelled:    func(msg tea.Msg) bool { _, ok := msg.(groupFormCancelMsg); return ok },
 			borderPicker: func(m tea.Model) *paneBorderFormatsModel { return m.(*groupFormModel).borderPicker },
 			borderCrumb:  "Groups", borderCurrent: "#G",

@@ -156,13 +156,13 @@ func TestRowpHostLikeRow(t *testing.T) {
 
 func TestRowpGroupAndSimpleRows(t *testing.T) {
 	rowpCheck(t, true, []rowpCase{
-		{"group", renderGroupRow(20, false, "db", 2, nil), "  db  2 "},
-		{"group active", renderGroupRow(20, true, "db", 2, []int{0}), rowpPad("▸ db  2 ", 20)},
-		{"group big count", renderGroupRow(20, false, "web", 123, nil), "  web  123 "},
-		{"group exact width", renderGroupRow(8, false, "db", 2, nil), "  db  2 "},
-		{"group long name exact width", renderGroupRow(11, false, "alpha", 2, nil), "  alpha  2 "},
-		{"group one cell short", renderGroupRow(10, false, "alpha", 2, nil), "  alp…  2 "},
-		{"group badge too wide", renderGroupRow(5, false, "alpha", 2, nil), "  al…"},
+		{"group", renderGroupRow(20, false, "db", 0, 2, nil), "  db  2 "},
+		{"group active", renderGroupRow(20, true, "db", 0, 2, []int{0}), rowpPad("▸ db  2 ", 20)},
+		{"group big count", renderGroupRow(20, false, "web", 0, 123, nil), "  web  123 "},
+		{"group exact width", renderGroupRow(8, false, "db", 0, 2, nil), "  db  2 "},
+		{"group long name exact width", renderGroupRow(11, false, "alpha", 0, 2, nil), "  alpha  2 "},
+		{"group one cell short", renderGroupRow(10, false, "alpha", 0, 2, nil), "  alp…  2 "},
+		{"group badge too wide", renderGroupRow(5, false, "alpha", 0, 2, nil), "  al…"},
 		{"simple", renderSimpleRow(20, false, "alpha", nil), "  alpha"},
 		{"simple active", renderSimpleRow(20, true, "alpha", []int{1}), rowpPad("▸ alpha", 20)},
 		{"simple exact width", renderSimpleRow(7, false, "alpha", nil), "  alpha"},
@@ -262,7 +262,7 @@ func TestRowpColourMarksFuzzyLettersOfMultiByteNames(t *testing.T) {
 	}
 	hl, ul := checkedStyle.Render, lipgloss.NewStyle().Underline(true).Render
 	rowpCheck(t, false, []rowpCase{
-		{"accent before the match", renderGroupRow(0, false, "café-web", 1, rowpMarks("web", "café-web")),
+		{"accent before the match", renderGroupRow(0, false, "café-web", 0, 1, rowpMarks("web", "café-web")),
 			"  café-" + hl("web") + " " + badgeCountStyle.Render("1")},
 		{"cyrillic", renderSimpleRow(0, false, "прод", rowpMarks("од", "прод")), "  пр" + hl("од")},
 		{"around an arrow", renderSimpleRow(0, false, "a↵b", rowpMarks("ab", "a↵b")), "  " + hl("a") + "↵" + hl("b")},
@@ -341,8 +341,8 @@ func TestRowpColour(t *testing.T) {
 		{"host active", renderHostLikeRow(20, true, true, "alpha", true, false, []int{1}), act("▸ ◼ a"+ul("l")+bar+"pha  ⚙ ", 20)},
 		{"host hidden active", renderHostLikeRow(20, true, false, "alpha", false, true, []int{0}), act("▸ ◻ ⊘ alpha", 20)},
 
-		{"group", renderGroupRow(20, false, "db", 2, []int{0}), "  " + hl("d") + "b" + two},
-		{"group active", renderGroupRow(20, true, "db", 2, []int{1}), act("▸ d"+ul("b")+bar+"  2 ", 20)},
+		{"group", renderGroupRow(20, false, "db", 0, 2, []int{0}), "  " + hl("d") + "b" + two},
+		{"group active", renderGroupRow(20, true, "db", 0, 2, []int{1}), act("▸ d"+ul("b")+bar+"  2 ", 20)},
 		{"simple", renderSimpleRow(20, false, "alpha", []int{2}), "  al" + hl("p") + "ha"},
 		{"simple active", renderSimpleRow(20, true, "alpha", nil), act("▸ alpha", 20)},
 	})
@@ -409,7 +409,7 @@ func TestRowpColourActiveRowKeepsTheBar(t *testing.T) {
 	}{
 		{"no marks", renderSimpleRow(20, true, "alpha", nil), "", 20},
 		{"two marks", renderSimpleRow(20, true, "alpha", []int{0, 4}), "aa", 20},
-		{"mark before the badge", renderGroupRow(20, true, "db", 2, []int{1}), "b", 20},
+		{"mark before the badge", renderGroupRow(20, true, "db", 0, 2, []int{1}), "b", 20},
 		{"host with a badge", renderHostLikeRow(20, true, true, "alpha", true, false, []int{1}), "l", 20},
 		{"hidden host drops marks", renderHostLikeRow(20, true, false, "alpha", false, true, []int{0}), "", 20},
 		{"mark on the cut", composeRow(6, true, "▸ ", "alpha", "", 0, []int{2, 3}, false), "p…", 6},

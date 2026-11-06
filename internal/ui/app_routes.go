@@ -84,7 +84,7 @@ func (msg knownHostsReloadMsg) apply(m *appModel) tea.Cmd {
 // Groups and the group form.
 
 func (m *appModel) openGroupForm(index int, g config.Group) {
-	m.form = newGroupFormModel(index, g, m.opts.Config.Defaults)
+	m.form = newGroupFormModel(index, g, m.opts.Inventory.Groups, m.opts.Config.Defaults)
 	m.form.parentCrumb = "Groups"
 	m.enter(screenGroupForm)
 }

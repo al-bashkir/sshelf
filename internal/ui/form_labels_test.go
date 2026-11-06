@@ -22,7 +22,7 @@ func flabForms() []flabForm {
 	defs := config.DefaultConfig().Defaults
 	return []flabForm{
 		{"settings", func() tea.Model { return newDefaultsFormModel(defs, false) }, settingsSchema()},
-		{"group", func() tea.Model { return newGroupFormModel(1, config.Group{Name: "prod", User: "admin"}, defs) }, groupSchema(defs)},
+		{"group", func() tea.Model { return newGroupFormModel(1, config.Group{Name: "prod", User: "admin"}, nil, defs) }, groupSchema(defs, parentOptions(nil, 1))},
 		{"host", func() tea.Model { return newHostFormModel(2, config.Host{Host: "box", User: "admin"}, defs) }, hostSchema(defs)},
 	}
 }

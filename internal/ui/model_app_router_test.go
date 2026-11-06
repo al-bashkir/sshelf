@@ -224,6 +224,70 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 }
 
+// saveWithParent opens a group form with open, moves its parent picker
+// steps options down from the current one, picks it and saves. It returns
+// the saved groups.
+func saveWithParent(t *testing.T, m *appModel, open tea.Msg, steps int) []config.Group {
+	t.Helper()
+	m.Update(open)
+	for i := 0; m.form.form.focusedFieldKey() != "parent"; i++ {
+		if i > 20 {
+			t.Fatal("no parent field")
+		}
+		m.Update(hk("j"))
+	}
+	m.Update(hk("enter"))
+	for range steps {
+		m.Update(hk("j"))
+	}
+	m.Update(hk("enter"))
+	_, cmd := m.Update(hk("ctrl+s"))
+	m.Update(cmd())
+	wantScreen(t, m, screenGroups)
+	return savedInventory(t, m).Groups
+}
+
+func TestRouterGroupParents(t *testing.T) {
+	t.Run("an existing group can go under another", func(t *testing.T) {
+		got := saveWithParent(t, routerApp(t), openGroupFormMsg{index: 0}, 1) // none, stage
+		if got[0].Parent != "stage" {
+			t.Fatalf("prod parent %q, want stage", got[0].Parent)
+		}
+	})
+	t.Run("a new group can go under any group", func(t *testing.T) {
+		got := saveWithParent(t, routerApp(t), openGroupFormPrefillMsg{group: config.Group{Name: "qa"}}, 2) // none, prod, stage
+		if got[2].Name != "qa" || got[2].Parent != "stage" {
+			t.Fatalf("saved %+v, want qa under stage", got[2])
+		}
+	})
+	t.Run("a group cannot go under its own subgroup", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.Groups[1].Parent = "prod"
+		got := saveWithParent(t, m, openGroupFormMsg{index: 0}, 1) // none only: the step wraps to none
+		if got[0].Parent != "" || got[1].Parent != "prod" {
+			t.Fatalf("saved %+v, want prod on top over stage", got)
+		}
+	})
+	t.Run("a renamed group keeps its subgroups", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.Groups[1].Parent = "prod"
+		m.Update(groupFormSaveMsg{index: 0, group: config.Group{Name: "live"}})
+		if got := savedInventory(t, m).Groups; len(got) != 2 || got[1].Parent != "live" {
+			t.Fatalf("saved %+v, want stage under live", got)
+		}
+	})
+	t.Run("a deleted group hands its subgroups to its parent", func(t *testing.T) {
+		m := routerApp(t)
+		m.opts.Inventory.Groups[1].Parent = "prod"
+		m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "qa", Parent: "stage"})
+		m.Update(deleteGroupMsg{index: 1})
+		got := savedInventory(t, m).Groups
+		if len(got) != 2 || got[1].Name != "qa" || got[1].Parent != "prod" {
+			t.Fatalf("saved %+v, want qa under prod", got)
+		}
+	})
+}
+
 func TestRouterGroupHosts(t *testing.T) {
 	t.Run("open", func(t *testing.T) {
 		m := routerApp(t)

@@ -37,8 +37,10 @@ Hosts:
 
 Groups:
 
-- `n` new group (popup form).
-- `e` edit group.
+- Groups show as a tree: a subgroup sits under its parent, two cells further in. A search lists the matches flat.
+- The host count of a group includes the hosts of its subgroups.
+- `n` new group (popup form). The `Parent` picker puts the group inside another group.
+- `e` edit group. The `Parent` picker does not offer the group itself or its subgroups.
 - `d` delete group (confirm overlay).
 - `y` copy group.
 - `Enter` open group hosts.

@@ -56,7 +56,7 @@ func frlHelpOff(d *config.Defaults) { d.ShowFieldHelp = false }
 
 // frlGroupForm opens the group form on g in a 100x40 window and sends ks.
 func frlGroupForm(g config.Group, ks ...string) tea.Model {
-	m := newGroupFormModel(1, g, config.DefaultConfig().Defaults)
+	m := newGroupFormModel(1, g, nil, config.DefaultConfig().Defaults)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	sendKeys(m, ks...)
 	return m
@@ -167,12 +167,12 @@ func TestSettingsPickerShowsAnUnlistedValue(t *testing.T) {
 // no help line on fields without help text.
 func TestGroupFormRowsShowPickersAndSubModal(t *testing.T) {
 	m := frlGroupForm(config.Group{Name: "prod"})
-	frlShows(t, m, "> Name:          prod", frlSection("SSH", 98))
+	frlShows(t, m, "> Name:          prod", "  Parent:        none ▾", frlSection("SSH", 98))
 	frlShows(t, m, "  Open mode:     inherit ▾", "  Tmux:          inherit ▾")
 	frlShows(t, m, "  Pane border:   inherit ▾", "  Border format: default")
 
 	m = frlGroupForm(config.Group{Name: "prod", OpenMode: "tmux-window", PaneBorderFmt: "#G"}, "k")
-	frlShows(t, m, "  Name:          prod", frlSection("SSH", 98))
+	frlShows(t, m, "  Name:          prod", "  Parent:        none ▾", frlSection("SSH", 98))
 	frlShows(t, m, "  Open mode:     tmux-window ▾", "  Tmux:          inherit ▾")
 	frlShows(t, m, "  Pane border:   inherit ▾", "> Border format: #G")
 }

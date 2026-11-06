@@ -125,6 +125,30 @@ func TestHostsViewOverlays(t *testing.T) {
 	}
 }
 
+// nestedGroups adds top over leaf (l1) and web over top, so the tree is
+// db, empty, web > top > leaf.
+func nestedGroups(o *Options) {
+	o.Inventory.Groups[0].Hosts = []string{"w1"}
+	o.Inventory.Groups = append(o.Inventory.Groups,
+		config.Group{Name: "top", Parent: "web"}, config.Group{Name: "leaf", Parent: "top", Hosts: []string{"l1", "w1"}})
+}
+
+func TestGroupsViewShowsTheTree(t *testing.T) {
+	m := groupsScreen(nestedGroups)
+	if got, want := shownGroups(m), []string{"db", "empty", "web", "top", "leaf"}; !slices.Equal(got, want) {
+		t.Fatalf("rows %v, want %v", got, want)
+	}
+	// Subgroups sit two cells further in per level; a count has the hosts
+	// of every subgroup, each once.
+	screenShows(t, m, []string{"│  web  2 ", "│    top  2 ", "│      leaf  2 "})
+
+	on(m, "/", "l", "e", "a", "f")
+	if got := shownGroups(m); !slices.Equal(got, []string{"leaf"}) {
+		t.Fatalf("rows %v, want [leaf]", got)
+	}
+	screenShows(t, m, []string{"│▸ leaf  2 "}, "▸     leaf") // a search lists the matches flat
+}
+
 func TestGroupsView(t *testing.T) {
 	m := groupsScreen(nil)
 	screenShows(t, m, []string{"●   3 groups"})

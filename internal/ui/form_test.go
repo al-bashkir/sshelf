@@ -109,7 +109,7 @@ func formCases() []formCase {
 	return []formCase{
 		{"host", func() tea.Model { return newHostFormModel(0, config.Host{Host: "box"}, defs) },
 			func(m tea.Msg) bool { _, ok := m.(hostFormCancelMsg); return ok }},
-		{"group", func() tea.Model { return newGroupFormModel(0, config.Group{Name: "prod"}, defs) },
+		{"group", func() tea.Model { return newGroupFormModel(0, config.Group{Name: "prod"}, nil, defs) },
 			func(m tea.Msg) bool { _, ok := m.(groupFormCancelMsg); return ok }},
 		{"settings", func() tea.Model { return newDefaultsFormModel(defs, false) },
 			func(m tea.Msg) bool { _, ok := m.(defaultsFormCancelMsg); return ok }},

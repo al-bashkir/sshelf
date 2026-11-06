@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -24,12 +23,13 @@ func (d groupsDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d groupsDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	row := item.(groupRow)
-	fmt.Fprint(w, renderGroupRow(m.Width(), index == m.Index(), row.name, row.hostCount, row.matchedIndexes))
+	fmt.Fprint(w, renderGroupRow(m.Width(), index == m.Index(), row.name, row.depth, row.hostCount, row.matchedIndexes))
 }
 
 type groupRow struct {
 	index          int
 	name           string
+	depth          int // 0 for a top-level group; 0 for every match of a search
 	hostCount      int
 	matchedIndexes []int
 }
@@ -62,14 +62,15 @@ func newGroupsModel(opts Options) *groupsModel {
 	return &groupsModel{listScreen: newListScreen(opts, l), allRows: rows, rows: rows}
 }
 
+// groupsRows lists the groups in tree order. A count has the hosts a connect
+// opens: those of the group and of every group under it.
 func groupsRows(inv config.Inventory) []groupRow {
-	rows := make([]groupRow, 0, len(inv.Groups))
-	for i, g := range inv.Groups {
-		rows = append(rows, groupRow{index: i, name: g.Name, hostCount: len(g.Hosts)})
+	tree := config.GroupTree(inv.Groups)
+	rows := make([]groupRow, 0, len(tree))
+	for _, n := range tree {
+		g := config.ResolveGroup(inv.Groups, inv.Groups[n.Index])
+		rows = append(rows, groupRow{index: n.Index, name: g.Name, depth: n.Depth, hostCount: len(g.Hosts)})
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		return strings.ToLower(rows[i].name) < strings.ToLower(rows[j].name)
-	})
 	return rows
 }
 
@@ -315,6 +316,7 @@ func (m *groupsModel) applyFilter(query string) {
 		for _, mt := range matches {
 			r := m.allRows[mt.Index]
 			r.matchedIndexes = mt.MatchedIndexes
+			r.depth = 0
 			rows = append(rows, r)
 		}
 	}

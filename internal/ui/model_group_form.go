@@ -24,7 +24,8 @@ type groupFormSaveMsg struct {
 // Schema
 // ---------------------------------------------------------------------------
 
-func groupSchema(defs config.Defaults) formSchema {
+// groupSchema is the group form; parents are the choices for its parent.
+func groupSchema(defs config.Defaults, parents []fieldOption) formSchema {
 	portPlaceholder, identPlaceholder, extraPlaceholder := sshPlaceholders(defs)
 
 	return formSchema{
@@ -32,6 +33,7 @@ func groupSchema(defs config.Defaults) formSchema {
 			{Key: "group", Label: "Group", Fields: []fieldDef{
 				{Key: "name", Label: "Name", Kind: fieldText,
 					Placeholder: "prod", CharLimit: 128},
+				{Key: "parent", Label: "Parent", Kind: fieldPicker, Options: parents},
 			}},
 			{Key: "ssh", Label: "SSH", Fields: []fieldDef{
 				{Key: "user", Label: "User", Kind: fieldText,
@@ -78,6 +80,7 @@ func groupToValues(g config.Group) map[string]string {
 	}
 	return map[string]string{
 		"name":        strings.TrimSpace(g.Name),
+		"parent":      g.Parent,
 		"user":        strings.TrimSpace(g.User),
 		"port":        portStr,
 		"identity":    strings.TrimSpace(g.IdentityFile),
@@ -96,6 +99,7 @@ func groupToValues(g config.Group) map[string]string {
 func applyGroupValues(values map[string]string, base config.Group) (config.Group, error) {
 	g := base
 	g.Name = strings.TrimSpace(values["name"])
+	g.Parent = values["parent"]
 	g.User = strings.TrimSpace(values["user"])
 	g.IdentityFile = strings.TrimSpace(values["identity"])
 	g.RemoteCommand = strings.TrimSpace(values["remote_cmd"])
@@ -129,14 +133,15 @@ type groupFormModel struct {
 	defs  config.Defaults // the custom border formats to choose from
 }
 
-func newGroupFormModel(index int, g config.Group, defs config.Defaults) *groupFormModel {
+// newGroupFormModel opens the form of group index (-1: a new group) in groups.
+func newGroupFormModel(index int, g config.Group, groups []config.Group, defs config.Defaults) *groupFormModel {
 	// Reasonable default for new groups.
 	if index < 0 && strings.TrimSpace(g.OpenMode) == "" {
 		g.OpenMode = "tmux-window"
 	}
 
 	values := groupToValues(g)
-	fm := newFormModel(groupSchema(defs), values, modalFormLabelWidth, defs.ShowFieldHelp)
+	fm := newFormModel(groupSchema(defs, parentOptions(groups, index)), values, modalFormLabelWidth, defs.ShowFieldHelp)
 
 	return &groupFormModel{
 		formScreen: newFormScreen(fm),
@@ -182,4 +187,14 @@ func (m *groupFormModel) View() string {
 	}
 	title := formTitle(m.parentCrumb, m.index, name, "Create Group", "Edit Group")
 	return renderModalForm(&m.form, m.width, m.height, title, m.toast)
+}
+
+// parentOptions lists "none" and, in tree order, the groups that group
+// index can sit in.
+func parentOptions(groups []config.Group, index int) []fieldOption {
+	out := []fieldOption{{Value: "", Display: "none"}}
+	for _, n := range config.ParentChoices(groups, index) {
+		out = append(out, fieldOption{Value: groups[n.Index].Name, Display: groups[n.Index].Name})
+	}
+	return out
 }
