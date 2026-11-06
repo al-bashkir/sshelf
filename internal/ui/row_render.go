@@ -8,7 +8,9 @@ import (
 )
 
 // highlightMatches renders matched character positions in accent style.
-// positions contains rune indexes that matched a fuzzy search query.
+// positions contains the byte offsets of the runes that matched a fuzzy
+// search query, as fuzzy.Match.MatchedIndexes gives them; an offset that
+// does not start a rune is ignored.
 // The result is the same string with matched chars styled.
 func highlightMatches(s string, positions []int, active bool) string {
 	if len(positions) == 0 {
@@ -20,7 +22,6 @@ func highlightMatches(s string, positions []int, active bool) string {
 		matchSet[p] = true
 	}
 
-	runes := []rune(s)
 	var sb strings.Builder
 	sb.Grow(len(s) * 2) // rough estimate
 
@@ -31,27 +32,27 @@ func highlightMatches(s string, positions []int, active bool) string {
 
 	run := false
 	runStart := 0
-	for i := 0; i <= len(runes); i++ {
-		inMatch := i < len(runes) && matchSet[i]
+	for i := range s { // i is the byte offset of each rune
+		inMatch := matchSet[i]
 		if inMatch && !run {
 			// Flush normal text.
 			if i > runStart {
-				sb.WriteString(string(runes[runStart:i]))
+				sb.WriteString(s[runStart:i])
 			}
 			run = true
 			runStart = i
 		} else if !inMatch && run {
 			// Flush matched text.
-			sb.WriteString(style.Render(string(runes[runStart:i])))
+			sb.WriteString(style.Render(s[runStart:i]))
 			run = false
 			runStart = i
 		}
 	}
 	// Flush remaining.
 	if run {
-		sb.WriteString(style.Render(string(runes[runStart:])))
-	} else if runStart < len(runes) {
-		sb.WriteString(string(runes[runStart:]))
+		sb.WriteString(style.Render(s[runStart:]))
+	} else if runStart < len(s) {
+		sb.WriteString(s[runStart:])
 	}
 
 	return sb.String()
@@ -131,7 +132,7 @@ func composeRow(width int, active bool, prefix, text, suffix string, suffixW int
 	}
 
 	if len(matched) > 0 {
-		visibleLen := len([]rune(text))
+		visibleLen := len(text)
 		shown := make([]int, 0, len(matched))
 		for _, idx := range matched {
 			if idx >= 0 && idx < visibleLen {

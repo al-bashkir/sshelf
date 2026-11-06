@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/sahilm/fuzzy"
 
 	"github.com/al-bashkir/sshelf/internal/config"
 )
@@ -201,20 +202,57 @@ func TestRowpScreensCutLongNames(t *testing.T) {
 	}
 }
 
-// TestRowpColour checks the style codes of the rows. Styles render as plain
-// text unless the output is a terminal, so the test runs itself again in a
-// child process with CLICOLOR_FORCE=1.
-func TestRowpColour(t *testing.T) {
-	if os.Getenv("ROWP_COLOUR_CHILD") != "1" {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestRowpColour$", "-test.count=1")
-		cmd.Env = append(os.Environ(), "CLICOLOR_FORCE=1", "NO_COLOR=", "ROWP_COLOUR_CHILD=1")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("colour run failed: %v\n%s", err, out)
+// rowpInColour reports whether this is the colour run of test t. Styles
+// render as plain text unless the output is a terminal, so outside that run
+// it runs t again in a child process with CLICOLOR_FORCE=1 and fails t if
+// the child fails.
+func rowpInColour(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv("ROWP_COLOUR_CHILD") == "1" {
+		if checkedStyle.Render("x") == "x" {
+			t.Fatal("CLICOLOR_FORCE=1 gave no colour")
 		}
+		return true
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "CLICOLOR_FORCE=1", "NO_COLOR=", "ROWP_COLOUR_CHILD=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("colour run failed: %v\n%s", err, out)
+	}
+	return false
+}
+
+// rowpMarks is the fuzzy match of query on s: byte offsets of the matched
+// letters.
+func rowpMarks(query, s string) []int {
+	return fuzzy.Find(query, []string{s})[0].MatchedIndexes
+}
+
+// Fuzzy matches give byte offsets, so in a name with multi-byte letters the
+// marks must land on the letters the query matched.
+func TestRowpColourMarksFuzzyLettersOfMultiByteNames(t *testing.T) {
+	if !rowpInColour(t) {
 		return
 	}
-	if checkedStyle.Render("x") == "x" {
-		t.Fatal("CLICOLOR_FORCE=1 gave no colour")
+	hl, ul := checkedStyle.Render, lipgloss.NewStyle().Underline(true).Render
+	rowpCheck(t, false, []rowpCase{
+		{"accent before the match", renderGroupRow(0, false, "café-web", 1, rowpMarks("web", "café-web")),
+			"  café-" + hl("web") + " " + badgeCountStyle.Render("1")},
+		{"cyrillic", renderSimpleRow(0, false, "прод", rowpMarks("од", "прод")), "  пр" + hl("од")},
+		{"around an arrow", renderSimpleRow(0, false, "a↵b", rowpMarks("ab", "a↵b")), "  " + hl("a") + "↵" + hl("b")},
+		{"offset inside a rune", highlightMatches("héllo", []int{2}, false), "héllo"},
+	})
+	g := groupsScreen(func(o *Options) { o.Inventory.Groups = append(o.Inventory.Groups, config.Group{Name: "прод"}) })
+	on(g, "/", "о", "д")
+	if v := g.View(); !strings.Contains(v, "▸ пр"+ul("од")) {
+		t.Fatalf("groups screen does not mark %q in the row:\n%q", "од", v)
+	}
+}
+
+// TestRowpColour checks the style codes of the rows.
+func TestRowpColour(t *testing.T) {
+	if !rowpInColour(t) {
+		return
 	}
 	hl, ul := checkedStyle.Render, lipgloss.NewStyle().Underline(true).Render
 	act := func(s string, w int) string { return rowActiveStyle.Render(rowpPad(s, w)) }
