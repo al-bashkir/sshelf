@@ -62,7 +62,10 @@ func (s *hostSelectList) refreshVisibleSelection() {
 	l := s.l
 	items := l.Items()
 	for i := range items {
-		row := items[i].(hostRow)
+		row, ok := items[i].(hostRow)
+		if !ok {
+			continue // a subgroup row
+		}
 		row.selected = s.selected[row.host]
 		items[i] = row
 	}
@@ -76,7 +79,10 @@ func (s *hostSelectList) refreshVisibleBadges(inv config.Inventory) {
 	items := l.Items()
 	hidx := newHostIndex(inv)
 	for i := range items {
-		row := items[i].(hostRow)
+		row, ok := items[i].(hostRow)
+		if !ok {
+			continue // a subgroup row
+		}
 		_, row.hasCfg = hidx.lookup(row.host)
 		items[i] = row
 	}

@@ -95,9 +95,10 @@ screenGroupHosts -- a --> screenHostPicker -- done --> screenGroupHosts
 screenHosts -- c --> screenCustomHost -- connect/cancel --> screenHosts
 screenGroups/screenGroupHosts -- c --> screenCustomHost -- connect/cancel --> returnTo
 
-screenGroups -- n/e/y --> screenGroupForm -- save/cancel --> screenGroups
+screenGroups/screenGroupHosts -- n/e/y --> screenGroupForm -- save/cancel --> returnTo (formReturnTo)
 
-screenGroupHosts -- Esc --> screenGroups
+screenGroupHosts -- Enter on a subgroup --> screenGroupHosts (the subgroup)
+screenGroupHosts -- Esc --> screenGroupHosts (the parent, cursor on the child) or screenGroups (top level)
 ```
 
 Notes:

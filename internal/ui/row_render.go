@@ -162,8 +162,7 @@ func renderSimpleRow(width int, active bool, text string, matchedIndexes []int) 
 	return composeRow(width, active, rowCursor(active), text, "", 0, matchedIndexes, false)
 }
 
-// renderGroupRow indents a group two cells per depth level.
-func renderGroupRow(width int, active bool, name string, depth, hostCount int, matchedIndexes []int) string {
+func renderGroupRow(width int, active bool, name string, hostCount int, matchedIndexes []int) string {
 	countStr := fmt.Sprintf("%d", hostCount)
 	styledBadge := " " + badgeCountStyle.Render(countStr)
 	suffix := styledBadge
@@ -172,5 +171,5 @@ func renderGroupRow(width int, active bool, name string, depth, hostCount int, m
 		// (badgeCountStyle has Padding(0,1) = 1 space each side).
 		suffix = "  " + countStr + " "
 	}
-	return composeRow(width, active, rowCursor(active)+strings.Repeat("  ", depth), name, suffix, lipgloss.Width(styledBadge), matchedIndexes, false)
+	return composeRow(width, active, rowCursor(active), name, suffix, lipgloss.Width(styledBadge), matchedIndexes, false)
 }

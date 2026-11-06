@@ -243,7 +243,7 @@ open_mode = "tmux-pane"  # override open mode for this group
 
 For single-host connections, SSH settings are `defaults` → matching `[[hosts]]` override. For group connections, they are `defaults` → matching `[[hosts]]` override → `[[groups]]` override.
 
-Groups can sit inside groups: set `parent` to the path of another group (`prod`, `prod/web`), or use the `Parent` picker in the group form. Only groups in the same parent need different names. A subgroup inherits the settings it leaves empty from its parent, and a parent group connects the hosts of all its subgroups.
+Groups can sit inside groups: open a group and press `n` to make a subgroup, set `parent` to the path of another group (`prod`, `prod/web`), or use the `Parent` picker in the group form. An open group shows its subgroups above its hosts; `Enter` opens a subgroup and `Esc` goes up. Only groups in the same parent need different names. A subgroup inherits the settings it leaves empty from its parent, and a parent group connects the hosts of all its subgroups.
 
 ## Limits
 

@@ -56,13 +56,13 @@ func TestGroupsKeysOpenOtherScreens(t *testing.T) {
 	}{
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1"), Alt: true}, switchScreenMsg{to: screenHosts}},
 		{hk("alt+3"), openDefaultsFormMsg{returnTo: screenGroups}},
-		{hk("n"), openGroupFormMsg{index: -1}},
-		{hk("N"), openGroupFormMsg{index: -1}},
-		{hk("e"), openGroupFormMsg{index: 1}},
+		{hk("n"), openGroupFormMsg{index: -1, returnTo: screenGroups}},
+		{hk("N"), openGroupFormMsg{index: -1, returnTo: screenGroups}},
+		{hk("e"), openGroupFormMsg{index: 1, returnTo: screenGroups}},
 		{hk("a"), openHostPickerMsg{groupIndex: 1, returnTo: screenGroups}},
 		{hk("c"), openCustomHostMsg{returnTo: screenGroups, groupIndex: 1}},
 		{hk("enter"), openGroupHostsMsg{index: 1}},
-		{hk("y"), openGroupFormPrefillMsg{group: dbCopy}},
+		{hk("y"), openGroupFormPrefillMsg{group: dbCopy, returnTo: screenGroups}},
 	}
 	for _, c := range cases {
 		m := groupsScreen(nil)

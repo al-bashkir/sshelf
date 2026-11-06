@@ -66,7 +66,12 @@ func (s *listScreen) openCmdPromptFor(prefix string, targets []string) tea.Cmd {
 	if len(targets) == 0 {
 		return nil
 	}
-	s.cmdPromptCrumb = cmdPromptCrumb(prefix, targets)
+	return s.openCmdPromptTitled(cmdPromptCrumb(prefix, targets))
+}
+
+// openCmdPromptTitled opens the remote-command prompt titled title.
+func (s *listScreen) openCmdPromptTitled(title string) tea.Cmd {
+	s.cmdPromptCrumb = title
 	s.cmdInput = newCmdPromptInput(s.width, s.height)
 	s.cmdPrompt = true
 	return nil

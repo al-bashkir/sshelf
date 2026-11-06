@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
 
@@ -11,8 +10,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/sahilm/fuzzy"
 )
 
 type groupsDelegate struct{}
@@ -23,13 +20,12 @@ func (d groupsDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d groupsDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	row := item.(groupRow)
-	fmt.Fprint(w, renderGroupRow(m.Width(), index == m.Index(), row.name, row.depth, row.hostCount, row.matchedIndexes))
+	fmt.Fprint(w, renderGroupRow(m.Width(), index == m.Index(), row.name, row.hostCount, row.matchedIndexes))
 }
 
 type groupRow struct {
 	index          int
 	name           string
-	depth          int // 0 for a top-level group; 0 for every match of a search
 	hostCount      int
 	matchedIndexes []int
 }
@@ -44,13 +40,12 @@ type groupsModel struct {
 	allRows []groupRow
 	rows    []groupRow
 
-	confirmQuit   bool
-	confirmDelete bool
-	deleteIndex   int
+	groupDelete
+	confirmQuit bool
 }
 
 func newGroupsModel(opts Options) *groupsModel {
-	rows := groupsRows(opts.Inventory)
+	rows := groupRows(opts.Inventory, "") // subgroups show inside their group
 	items := make([]list.Item, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, r)
@@ -60,18 +55,6 @@ func newGroupsModel(opts Options) *groupsModel {
 	l.SetDelegate(groupsDelegate{})
 	l.Title = "Groups"
 	return &groupsModel{listScreen: newListScreen(opts, l), allRows: rows, rows: rows}
-}
-
-// groupsRows lists the groups in tree order. A count has the hosts a connect
-// opens: those of the group and of every group under it.
-func groupsRows(inv config.Inventory) []groupRow {
-	tree := config.GroupTree(inv.Groups)
-	rows := make([]groupRow, 0, len(tree))
-	for _, n := range tree {
-		g := config.ResolveGroup(inv.Groups, inv.Groups[n.Index])
-		rows = append(rows, groupRow{index: n.Index, name: g.Name, depth: n.Depth, hostCount: len(g.Hosts)})
-	}
-	return rows
 }
 
 func (m *groupsModel) setRows(rows []groupRow) {
@@ -85,7 +68,7 @@ func (m *groupsModel) setRows(rows []groupRow) {
 
 func (m *groupsModel) Refresh(inv config.Inventory) {
 	m.opts.Inventory = inv
-	m.allRows = groupsRows(inv)
+	m.allRows = groupRows(inv, "")
 	m.applyFilter(m.search.Value())
 }
 
@@ -110,26 +93,12 @@ func (m *groupsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return cmd, true
 	}
 	if m.confirmDelete {
-		return m.deleteKey(msg), true
+		return m.deleteKey(msg, &m.toast), true
 	}
 	if handled, cmd := handleConfirmConnect(msg, &m.confirmConnect, &m.pendingConnectFn, &m.toast); handled {
 		return cmd, true
 	}
 	return nil, m.focus == focusList && handleVimListNav(msg, &m.list, &m.navPendingG)
-}
-
-// deleteKey answers the delete question: y deletes, n cancels, and any
-// other key leaves the question open.
-func (m *groupsModel) deleteKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "y", "Y", "enter":
-		m.confirmDelete = false
-		return msgCmd(deleteGroupMsg{index: m.deleteIndex})
-	case "n", "N", "esc":
-		m.confirmDelete = false
-		m.toast = toast{}
-	}
-	return nil
 }
 
 func (m *groupsModel) keyActions() []keyAction {
@@ -148,9 +117,9 @@ func (m *groupsModel) keyActions() []keyAction {
 			handleEscChain(&m.focus, &m.search, &m.prevSearch, 0, nil, m.applyFilter)
 			return nil
 		}},
-		{keys: km.NewGroup, inList: true, run: func() tea.Cmd { return msgCmd(openGroupFormMsg{index: -1}) }},
+		{keys: km.NewGroup, inList: true, run: func() tea.Cmd { return msgCmd(openGroupFormMsg{index: -1, returnTo: screenGroups}) }},
 		{keys: km.EditGroup, inList: true, run: m.onRow(func(r groupRow) tea.Cmd {
-			return msgCmd(openGroupFormMsg{index: r.index})
+			return msgCmd(openGroupFormMsg{index: r.index, returnTo: screenGroups})
 		})},
 		{keys: km.AddHosts, inList: true, run: m.onRow(func(r groupRow) tea.Cmd {
 			return msgCmd(openHostPickerMsg{groupIndex: r.index, returnTo: screenGroups})
@@ -158,7 +127,7 @@ func (m *groupsModel) keyActions() []keyAction {
 		{keys: km.CustomHost, inList: true, run: m.onRow(func(r groupRow) tea.Cmd {
 			return msgCmd(openCustomHostMsg{returnTo: screenGroups, groupIndex: r.index})
 		})},
-		{keys: km.DeleteGroup, inList: true, run: m.onRow(m.askDelete)},
+		{keys: km.DeleteGroup, inList: true, run: m.onRow(func(r groupRow) tea.Cmd { return m.askDelete(r, &m.toast) })},
 		{keys: km.Connect, run: m.enter},
 		{keys: km.ConnectCmd, inList: true, run: m.onRow(m.openCmdPrompt)},
 		{keys: km.ConnectAll, inList: true, run: func() tea.Cmd {
@@ -194,18 +163,8 @@ func (m *groupsModel) enter() tea.Cmd {
 	return m.onRow(func(r groupRow) tea.Cmd { return msgCmd(openGroupHostsMsg{index: r.index}) })()
 }
 
-func (m *groupsModel) askDelete(r groupRow) tea.Cmd {
-	m.confirmDelete = true
-	m.deleteIndex = r.index
-	m.toast = toast{text: "delete? (y/n)", level: toastWarn}
-	return nil
-}
-
 func (m *groupsModel) openCmdPrompt(r groupRow) tea.Cmd {
-	m.cmdPromptCrumb = "Groups > " + r.name
-	m.cmdInput = newCmdPromptInput(m.width, m.height)
-	m.cmdPrompt = true
-	return nil
+	return m.openCmdPromptTitled("Groups > " + r.name)
 }
 
 // copyGroup opens a new-group form filled from the selected group.
@@ -215,9 +174,7 @@ func (m *groupsModel) copyGroup() tea.Cmd {
 		m.toast = toast{text: "no group selected", level: toastWarn}
 		return nil
 	}
-	g := m.opts.Inventory.Groups[row.index]
-	g.Name = suggestCopyGroupName(m.opts.Inventory, g.Name)
-	return msgCmd(openGroupFormPrefillMsg{group: g})
+	return copyGroupCmd(m.opts.Inventory, row.index, screenGroups)
 }
 
 func (m *groupsModel) View() string {
@@ -244,14 +201,9 @@ func (m *groupsModel) View() string {
 
 // deleteView centers the delete question in the list area.
 func (m *groupsModel) deleteView() string {
-	name, hostCount := "", 0
-	if m.deleteIndex >= 0 && m.deleteIndex < len(m.opts.Inventory.Groups) { // a stale index must not crash the view
-		g := m.opts.Inventory.Groups[m.deleteIndex]
-		name, hostCount = g.Name, len(g.Hosts)
-	}
 	innerW := max(0, m.width-2)
 	contentH := max(0, max(0, m.height-2)-4)
-	return lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, deleteGroupConfirmBox(innerW, name, hostCount))
+	return lipgloss.Place(innerW, contentH, lipgloss.Center, lipgloss.Center, m.deleteBox(m.opts.Inventory.Groups, innerW))
 }
 
 func (m *groupsModel) helpKeys() helpMap {
@@ -306,20 +258,7 @@ func (m *groupsModel) applyFilter(query string) {
 		prevIndex = row.index
 	}
 
-	query = strings.TrimSpace(query)
-	var rows []groupRow
-	if query == "" {
-		rows = append([]groupRow(nil), m.allRows...)
-	} else {
-		matches := fuzzy.Find(query, groupNames(m.allRows))
-		rows = make([]groupRow, 0, len(matches))
-		for _, mt := range matches {
-			r := m.allRows[mt.Index]
-			r.matchedIndexes = mt.MatchedIndexes
-			r.depth = 0
-			rows = append(rows, r)
-		}
-	}
+	rows := matchGroupRows(m.allRows, query)
 	m.setRows(rows)
 
 	if len(rows) == 0 {
@@ -351,16 +290,7 @@ func (m *groupsModel) connectAllCmd(oneWindow bool, remoteCmd string) tea.Cmd {
 		m.toast = toast{text: "no group selected", level: toastWarn}
 		return nil
 	}
-	if row.index >= len(m.opts.Inventory.Groups) { // rows index the inventory, so only a stale row fails
-		m.toast = toast{text: "invalid group", level: toastErr}
-		return nil
-	}
-	g := config.ResolveGroup(m.opts.Inventory.Groups, m.opts.Inventory.Groups[row.index])
-	if len(g.Hosts) == 0 {
-		m.toast = toast{text: "group has no hosts", level: toastWarn}
-		return nil
-	}
-	return m.connect(append([]string(nil), g.Hosts...), m.opts, &g, oneWindow, remoteCmd)
+	return m.connectGroup(m.opts, row.index, oneWindow, remoteCmd)
 }
 
 func (m *groupsModel) refreshAccentStyles() {

@@ -39,6 +39,10 @@ func (d hostDelegate) Spacing() int                            { return 0 }
 func (d hostDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d hostDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	if g, ok := item.(groupRow); ok { // a subgroup in Group hosts
+		groupsDelegate{}.Render(w, m, index, g)
+		return
+	}
 	row := item.(hostRow)
 	fmt.Fprint(w, renderHostLikeRow(m.Width(), index == m.Index(), row.selected, row.host, row.hasCfg, row.hidden, row.matchedIndexes))
 }

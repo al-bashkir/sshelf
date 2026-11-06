@@ -30,11 +30,13 @@ type switchScreenMsg struct {
 }
 
 type openGroupFormMsg struct {
-	index int
+	index    int
+	returnTo screen // Groups, or Group hosts for a subgroup
 }
 
 type openGroupFormPrefillMsg struct {
-	group config.Group
+	group    config.Group
+	returnTo screen
 }
 
 type deleteGroupMsg struct {
@@ -43,6 +45,7 @@ type deleteGroupMsg struct {
 
 type openGroupHostsMsg struct {
 	index int
+	from  string // the path of the subgroup to put the cursor on; "" for the first row
 }
 
 type openHostPickerMsg struct {
@@ -144,6 +147,7 @@ type appModel struct {
 	returnGroupIndex   int
 	defaultsReturnTo   screen
 	hostFormReturnTo   screen
+	formReturnTo       screen // where the group form goes back to
 	defaultsToastToken int
 	toastToken         int
 	theme              themeChoice // the colorscheme and accent on screen
@@ -294,7 +298,7 @@ func (m *appModel) breadcrumb() string {
 		return "Groups"
 	case screenGroupHosts:
 		if m.gh != nil {
-			return "Groups > " + m.gh.group.Name
+			return groupTrail(m.gh.group)
 		}
 		return "Groups"
 	case screenDefaultsForm:

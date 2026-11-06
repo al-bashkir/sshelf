@@ -133,20 +133,19 @@ func nestedGroups(o *Options) {
 		config.Group{Name: "top", Parent: "web"}, config.Group{Name: "leaf", Parent: "web/top", Hosts: []string{"l1", "w1"}})
 }
 
-func TestGroupsViewShowsTheTree(t *testing.T) {
+func TestGroupsTabListsTopLevelGroups(t *testing.T) {
 	m := groupsScreen(nestedGroups)
-	if got, want := shownGroups(m), []string{"db", "empty", "web", "top", "leaf"}; !slices.Equal(got, want) {
+	if got, want := shownGroups(m), []string{"db", "empty", "web"}; !slices.Equal(got, want) {
 		t.Fatalf("rows %v, want %v", got, want)
 	}
-	// Subgroups sit two cells further in per level; a count has the hosts
-	// of every subgroup, each once.
-	screenShows(t, m, []string{"│  web  2 ", "│    top  2 ", "│      leaf  2 "})
+	// A count has the hosts a connect opens: those of every subgroup too,
+	// each once.
+	screenShows(t, m, []string{"│  web  2 "}, "top", "leaf")
 
-	on(m, "/", "l", "e", "a", "f")
-	if got := shownGroups(m); !slices.Equal(got, []string{"leaf"}) {
-		t.Fatalf("rows %v, want [leaf]", got)
+	on(m, "/", "l", "e", "a", "f") // a subgroup is found inside its group, not here
+	if got := shownGroups(m); len(got) != 0 {
+		t.Fatalf("rows %v, want none", got)
 	}
-	screenShows(t, m, []string{"│▸ leaf  2 "}, "▸     leaf") // a search lists the matches flat
 }
 
 func TestGroupsView(t *testing.T) {
@@ -198,8 +197,8 @@ func TestGroupHostsView(t *testing.T) {
 	screenShows(t, m, []string{"copied"}, "3 hosts")
 
 	m = groupHostsScreen(0, nil)
-	checkFooters(t, m, footerCases("↵ connect  ␣ select  esc back  ? help",
-		"↵ connect  O pane  ·  ␣ select", "e config  c custom  d remove"))
+	checkFooters(t, m, footerCases("↵ open/connect  ␣ select  esc back  ? help",
+		"↵ open/connect  O pane  ·  ␣ select", "e edit  c custom  d delete"))
 
 	// The remove question keeps the crumb, drops the counts and the footer.
 	m = groupHostsScreen(0, nil)

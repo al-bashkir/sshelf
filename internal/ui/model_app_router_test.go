@@ -135,7 +135,8 @@ func TestRouterSwitchScreen(t *testing.T) {
 func TestRouterGroupForm(t *testing.T) {
 	t.Run("open an existing group", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormMsg{index: 0})
+		m.Update(switchScreenMsg{to: screenGroups}) // group forms and deletes start on Groups
+		m.Update(openGroupFormMsg{index: 0, returnTo: screenGroups})
 		wantScreen(t, m, screenGroupForm)
 		if m.form.index != 0 || m.form.group.Name != "prod" || m.form.parentCrumb != "Groups" {
 			t.Fatalf("form index=%d group=%q crumb=%q, want 0 prod Groups", m.form.index, m.form.group.Name, m.form.parentCrumb)
@@ -145,7 +146,7 @@ func TestRouterGroupForm(t *testing.T) {
 	t.Run("an index out of range opens an empty form", func(t *testing.T) {
 		for _, i := range []int{-1, 2} {
 			m := routerApp(t)
-			m.Update(openGroupFormMsg{index: i})
+			m.Update(openGroupFormMsg{index: i, returnTo: screenGroups})
 			if m.form.index != i || m.form.group.Name != "" {
 				t.Fatalf("index %d: form index=%d group=%q, want an empty group", i, m.form.index, m.form.group.Name)
 			}
@@ -153,7 +154,8 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("prefill opens a new group", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormPrefillMsg{group: config.Group{Name: "copy"}})
+		m.Update(switchScreenMsg{to: screenGroups})
+		m.Update(openGroupFormPrefillMsg{group: config.Group{Name: "copy"}, returnTo: screenGroups})
 		wantScreen(t, m, screenGroupForm)
 		if m.form.index != -1 || m.form.group.Name != "copy" || m.form.parentCrumb != "Groups" {
 			t.Fatalf("form index=%d group=%q crumb=%q, want -1 copy Groups", m.form.index, m.form.group.Name, m.form.parentCrumb)
@@ -162,12 +164,12 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("a screen opened before any window size gets no size", func(t *testing.T) {
 		m := newAppModel(Options{Config: config.DefaultConfig()})
-		m.Update(openGroupFormMsg{index: -1})
+		m.Update(openGroupFormMsg{index: -1, returnTo: screenGroups})
 		wantSize(t, "form", m.form.width, m.form.height, nil, 0, 0)
 	})
 	t.Run("cancel goes back to Groups", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormMsg{index: 0})
+		m.Update(openGroupFormMsg{index: 0, returnTo: screenGroups})
 		m.Update(groupFormCancelMsg{})
 		wantScreen(t, m, screenGroups)
 		if m.form != nil {
@@ -176,7 +178,7 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("save writes the group and goes back to Groups", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormPrefillMsg{})
+		m.Update(openGroupFormPrefillMsg{returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: " qa "}})
 		wantScreen(t, m, screenGroups)
 		wantToast(t, "groups", m.groups.toast, "saved", toastOK)
@@ -189,7 +191,7 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("save over an existing group replaces it", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormMsg{index: 0})
+		m.Update(openGroupFormMsg{index: 0, returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: 0, group: config.Group{Name: "live"}})
 		if got := savedInventory(t, m).Groups; len(got) != 2 || got[0].Name != "live" {
 			t.Fatalf("saved groups %+v, want live in place of prod", got)
@@ -197,20 +199,21 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("a failed save keeps the form open", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormMsg{index: 1})
+		m.Update(openGroupFormMsg{index: 1, returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: 1, group: config.Group{Name: "prod"}})
 		wantScreen(t, m, screenGroupForm)
 		wantToast(t, "form", m.form.toast, "group name already exists", toastErr)
 	})
 	t.Run("a form opened out of range cannot save", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormMsg{index: 2})
+		m.Update(openGroupFormMsg{index: 2, returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: 2, group: config.Group{Name: "qa"}})
 		wantScreen(t, m, screenGroupForm)
 		wantToast(t, "form", m.form.toast, "invalid group name index", toastErr)
 	})
 	t.Run("delete", func(t *testing.T) {
 		m := routerApp(t)
+		m.Update(switchScreenMsg{to: screenGroups})
 		m.Update(deleteGroupMsg{index: 0})
 		wantToast(t, "groups", m.groups.toast, "deleted", toastOK)
 		if got := savedInventory(t, m).Groups; len(got) != 1 || got[0].Name != "stage" {
@@ -219,6 +222,7 @@ func TestRouterGroupForm(t *testing.T) {
 	})
 	t.Run("a failed delete shows the error", func(t *testing.T) {
 		m := routerApp(t)
+		m.Update(switchScreenMsg{to: screenGroups})
 		m.Update(deleteGroupMsg{index: 2})
 		wantToast(t, "groups", m.groups.toast, "invalid group index", toastErr)
 	})
@@ -249,13 +253,13 @@ func saveWithParent(t *testing.T, m *appModel, open tea.Msg, steps int) []config
 
 func TestRouterGroupParents(t *testing.T) {
 	t.Run("an existing group can go under another", func(t *testing.T) {
-		got := saveWithParent(t, routerApp(t), openGroupFormMsg{index: 0}, 1) // none, stage
+		got := saveWithParent(t, routerApp(t), openGroupFormMsg{index: 0, returnTo: screenGroups}, 1) // none, stage
 		if got[0].Parent != "stage" {
 			t.Fatalf("prod parent %q, want stage", got[0].Parent)
 		}
 	})
 	t.Run("a new group can go under any group", func(t *testing.T) {
-		got := saveWithParent(t, routerApp(t), openGroupFormPrefillMsg{group: config.Group{Name: "qa"}}, 2) // none, prod, stage
+		got := saveWithParent(t, routerApp(t), openGroupFormPrefillMsg{group: config.Group{Name: "qa"}, returnTo: screenGroups}, 2) // none, prod, stage
 		if got[2].Name != "qa" || got[2].Parent != "stage" {
 			t.Fatalf("saved %+v, want qa under stage", got[2])
 		}
@@ -263,7 +267,7 @@ func TestRouterGroupParents(t *testing.T) {
 	t.Run("a group cannot go under its own subgroup", func(t *testing.T) {
 		m := routerApp(t)
 		m.opts.Inventory.Groups[1].Parent = "prod"
-		got := saveWithParent(t, m, openGroupFormMsg{index: 0}, 1) // none only: the step wraps to none
+		got := saveWithParent(t, m, openGroupFormMsg{index: 0, returnTo: screenGroups}, 1) // none only: the step wraps to none
 		if got[0].Parent != "" || got[1].Parent != "prod" {
 			t.Fatalf("saved %+v, want prod on top over stage", got)
 		}
@@ -289,7 +293,7 @@ func TestRouterGroupParents(t *testing.T) {
 		m := routerApp(t)
 		m.opts.Inventory.Groups[1].Parent = "prod"
 		m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "qa", Parent: "prod/stage"})
-		m.Update(openGroupFormMsg{index: 1})
+		m.Update(openGroupFormMsg{index: 1, returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: 1, group: config.Group{Name: "stage"}}) // to the top level
 		if got := savedInventory(t, m).Groups; len(got) != 3 || got[2].Parent != "stage" {
 			t.Fatalf("saved %+v, want qa under stage", got)
@@ -297,21 +301,21 @@ func TestRouterGroupParents(t *testing.T) {
 	})
 	t.Run("one name can sit in two parents, not twice in one", func(t *testing.T) {
 		m := routerApp(t)
-		m.Update(openGroupFormPrefillMsg{})
+		m.Update(openGroupFormPrefillMsg{returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: "web", Parent: "prod"}})
-		m.Update(openGroupFormPrefillMsg{})
+		m.Update(openGroupFormPrefillMsg{returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: "web", Parent: "stage"}})
 		if got := savedInventory(t, m).Groups; len(got) != 4 {
 			t.Fatalf("saved %+v, want web under prod and under stage", got)
 		}
-		m.Update(openGroupFormPrefillMsg{})
+		m.Update(openGroupFormPrefillMsg{returnTo: screenGroups})
 		m.Update(groupFormSaveMsg{index: -1, group: config.Group{Name: "web", Parent: "prod"}})
 		wantToast(t, "form", m.form.toast, "group name already exists", toastErr)
 	})
 	t.Run("the parent picker offers paths", func(t *testing.T) {
 		m := routerApp(t)
 		m.opts.Inventory.Groups[1].Parent = "prod"
-		got := saveWithParent(t, m, openGroupFormPrefillMsg{group: config.Group{Name: "qa"}}, 2) // none, prod, prod/stage
+		got := saveWithParent(t, m, openGroupFormPrefillMsg{group: config.Group{Name: "qa"}, returnTo: screenGroups}, 2) // none, prod, prod/stage
 		if got[2].Parent != "prod/stage" {
 			t.Fatalf("qa parent %q, want prod/stage", got[2].Parent)
 		}
@@ -624,7 +628,7 @@ func TestRouterDefaultsForm(t *testing.T) {
 		m.Update(openGroupPickerMsg{hosts: []string{"db"}})
 		m.gp.focus = focusSearch
 		m.Update(openCustomHostMsg{returnTo: screenHosts, groupIndex: -1})
-		m.Update(openGroupFormMsg{index: 0})
+		m.Update(openGroupFormMsg{index: 0, returnTo: screenGroups})
 		m.Update(openHostFormMsg{host: "web", returnTo: screenHosts})
 		m.Update(openDefaultsFormMsg{returnTo: screenHosts})
 
@@ -1009,7 +1013,7 @@ func TestRouterToggleHidden(t *testing.T) {
 
 func TestRouterSizesEveryOpenScreen(t *testing.T) {
 	m := routerApp(t)
-	m.Update(openGroupFormMsg{index: 0})
+	m.Update(openGroupFormMsg{index: 0, returnTo: screenGroups})
 	m.Update(openGroupHostsMsg{index: 0})
 	m.Update(openHostPickerMsg{groupIndex: 0, returnTo: screenGroupHosts})
 	m.Update(openGroupPickerMsg{hosts: []string{"db"}})
@@ -1079,7 +1083,7 @@ func TestRouterForwardsOtherMessagesToTheScreen(t *testing.T) {
 			open tea.Msg
 			want tea.Msg
 		}{
-			{openGroupFormMsg{index: 0}, groupFormCancelMsg{}},
+			{openGroupFormMsg{index: 0, returnTo: screenGroups}, groupFormCancelMsg{}},
 			{openHostPickerMsg{groupIndex: 0, returnTo: screenHosts}, hostPickerCancelMsg{}},
 			{openGroupPickerMsg{hosts: []string{"db"}}, groupPickerCancelMsg{}},
 			{openCustomHostMsg{returnTo: screenHosts, groupIndex: -1}, customHostCancelMsg{}},
@@ -1138,7 +1142,7 @@ func TestRouterView(t *testing.T) {
 			open tea.Msg
 			view func(m *appModel) string
 		}{
-			{openGroupFormMsg{index: 0}, func(m *appModel) string { return m.form.View() }},
+			{openGroupFormMsg{index: 0, returnTo: screenGroups}, func(m *appModel) string { return m.form.View() }},
 			{openHostPickerMsg{groupIndex: 0, returnTo: screenHosts}, func(m *appModel) string { return m.picker.View() }},
 			{openGroupPickerMsg{hosts: []string{"db"}}, func(m *appModel) string { return m.gp.View() }},
 			{openCustomHostMsg{returnTo: screenHosts, groupIndex: -1}, func(m *appModel) string { return m.customHost.View() }},
@@ -1232,5 +1236,106 @@ func TestRouterSpinnerTick(t *testing.T) {
 		if wantIndex := map[bool]int{true: 1, false: 0}[c.active]; spinnerIndex != wantIndex {
 			t.Fatalf("%s: frame %d, want %d", c.name, spinnerIndex, wantIndex)
 		}
+	}
+}
+
+// deliver sends m the message that cmd makes; nil does nothing.
+func deliver(m *appModel, cmd tea.Cmd) {
+	if cmd != nil {
+		m.Update(cmd())
+	}
+}
+
+// withAPI adds api (a1) inside prod as group 2.
+func withAPI(t *testing.T) *appModel {
+	m := routerApp(t)
+	m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "api", Parent: "prod", Hosts: []string{"a1"}})
+	return m
+}
+
+func TestRouterSubgroupNavigation(t *testing.T) {
+	m := withAPI(t)
+	m.Update(openGroupHostsMsg{index: 0})
+	_, cmd := m.Update(hk("enter")) // the cursor starts on api, the first row
+	deliver(m, cmd)
+	if m.gh.groupIndex != 2 || m.breadcrumb() != "Groups > prod > api" {
+		t.Fatalf("group %d crumb %q, want api inside prod", m.gh.groupIndex, m.breadcrumb())
+	}
+	screenShows(t, m, []string{"Groups > prod > api", "a1"})
+
+	_, cmd = m.Update(hk("esc"))
+	deliver(m, cmd)
+	if r, ok := m.gh.list.SelectedItem().(groupRow); m.gh.groupIndex != 0 || !ok || r.name != "api" {
+		t.Fatalf("group %d cursor %v, want prod with the cursor on api", m.gh.groupIndex, m.gh.list.SelectedItem())
+	}
+	_, cmd = m.Update(hk("esc"))
+	deliver(m, cmd)
+	wantScreen(t, m, screenGroups)
+}
+
+func TestRouterGroupFormReturnsWhereItOpened(t *testing.T) {
+	t.Run("cancel goes back inside the group", func(t *testing.T) {
+		m := withAPI(t)
+		m.Update(openGroupHostsMsg{index: 0})
+		m.Update(openGroupFormMsg{index: 2, returnTo: screenGroupHosts})
+		if m.form.parentCrumb != "Groups > prod" {
+			t.Fatalf("form crumb %q, want Groups > prod", m.form.parentCrumb)
+		}
+		m.Update(groupFormCancelMsg{})
+		wantScreen(t, m, screenGroupHosts)
+	})
+	t.Run("save shows the change inside the group", func(t *testing.T) {
+		m := withAPI(t)
+		m.Update(openGroupHostsMsg{index: 0})
+		m.Update(openGroupFormMsg{index: 2, returnTo: screenGroupHosts})
+		m.Update(groupFormSaveMsg{index: 2, group: config.Group{Name: "rest", Parent: "prod", Hosts: []string{"a1"}}})
+		wantScreen(t, m, screenGroupHosts)
+		wantToast(t, "group hosts", m.gh.toast, "saved", toastOK)
+		if got := ghRows(m.gh); !slices.Contains(got, "rest/") || slices.Contains(got, "api/") {
+			t.Fatalf("rows %v, want rest in place of api", got)
+		}
+	})
+	t.Run("a new subgroup inherits its open mode", func(t *testing.T) {
+		m := withAPI(t)
+		m.Update(openGroupFormPrefillMsg{group: config.Group{Parent: "prod"}, returnTo: screenGroupHosts})
+		if got := m.form.form.value("open_mode"); got != "" {
+			t.Fatalf("open mode %q, want inherit", got)
+		}
+		m.Update(openGroupFormMsg{index: -1, returnTo: screenGroups})
+		if got := m.form.form.value("open_mode"); got != "tmux-window" {
+			t.Fatalf("top-level open mode %q, want tmux-window", got)
+		}
+		m.Update(openGroupFormMsg{index: 0, returnTo: screenGroups}) // prod, which sets no open mode
+		if got := m.form.form.value("open_mode"); got != "" {
+			t.Fatalf("existing group open mode %q, want inherit", got)
+		}
+	})
+}
+
+func TestRouterDeleteInsideAGroup(t *testing.T) {
+	m := routerApp(t)
+	m.opts.Inventory.Groups = append([]config.Group{{Name: "qa", Parent: "stage"}}, m.opts.Inventory.Groups...) // qa, prod, stage
+	m.Update(openGroupHostsMsg{index: 2})
+	m.Update(deleteGroupMsg{index: 0})
+	wantScreen(t, m, screenGroupHosts)
+	wantToast(t, "group hosts", m.gh.toast, "deleted", toastOK)
+	if m.gh.groupIndex != 1 || m.gh.group.Name != "stage" || len(ghRows(m.gh)) != 0 {
+		t.Fatalf("group %d %q rows %v, want stage (now 1) with no rows", m.gh.groupIndex, m.gh.group.Name, ghRows(m.gh))
+	}
+}
+
+// Back from the second subgroup, the cursor is on that subgroup, not on
+// the first row.
+func TestRouterBackPutsTheCursorOnTheChild(t *testing.T) {
+	m := withAPI(t)
+	m.opts.Inventory.Groups = append(m.opts.Inventory.Groups, config.Group{Name: "zz", Parent: "prod"})
+	m.Update(openGroupHostsMsg{index: 0})
+	m.Update(hk("j"))
+	_, cmd := m.Update(hk("enter"))
+	deliver(m, cmd)
+	_, cmd = m.Update(hk("esc"))
+	deliver(m, cmd)
+	if r, ok := m.gh.list.SelectedItem().(groupRow); !ok || r.name != "zz" {
+		t.Fatalf("cursor on %v, want zz", m.gh.list.SelectedItem())
 	}
 }

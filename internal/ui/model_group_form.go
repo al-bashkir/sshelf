@@ -136,7 +136,7 @@ type groupFormModel struct {
 // newGroupFormModel opens the form of group index (-1: a new group) in groups.
 func newGroupFormModel(index int, g config.Group, groups []config.Group, defs config.Defaults) *groupFormModel {
 	// Reasonable default for new groups.
-	if index < 0 && strings.TrimSpace(g.OpenMode) == "" {
+	if index < 0 && g.Parent == "" && strings.TrimSpace(g.OpenMode) == "" { // a subgroup inherits its open mode
 		g.OpenMode = "tmux-window"
 	}
 

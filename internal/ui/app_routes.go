@@ -83,48 +83,74 @@ func (msg knownHostsReloadMsg) apply(m *appModel) tea.Cmd {
 
 // Groups and the group form.
 
-func (m *appModel) openGroupForm(index int, g config.Group) {
+func (m *appModel) openGroupForm(index int, g config.Group, returnTo screen) {
 	m.form = newGroupFormModel(index, g, m.opts.Inventory.Groups, m.opts.Config.Defaults)
-	m.form.parentCrumb = "Groups"
+	m.form.parentCrumb = m.breadcrumb()
+	m.formReturnTo = returnTo
 	m.enter(screenGroupForm)
 }
 
 func (msg openGroupFormMsg) apply(m *appModel) tea.Cmd {
 	g, _ := m.group(msg.index) // out of range: an empty form
-	m.openGroupForm(msg.index, g)
+	m.openGroupForm(msg.index, g, msg.returnTo)
 	return nil
 }
 
 func (msg openGroupFormPrefillMsg) apply(m *appModel) tea.Cmd {
-	m.openGroupForm(-1, msg.group)
+	m.openGroupForm(-1, msg.group, msg.returnTo)
 	return nil
 }
 
 func (groupFormCancelMsg) apply(m *appModel) tea.Cmd {
 	m.form = nil
-	m.screen = screenGroups
+	m.screen = m.formReturnTo
 	return nil
 }
 
 func (msg groupFormSaveMsg) apply(m *appModel) tea.Cmd {
+	back := m.groupHostsPath()
 	if err := m.saveGroup(msg.index, msg.group); err != nil {
 		// Keep form open on error.
 		m.form.toast = toast{text: err.Error(), level: toastErr}
 		return nil
 	}
-	m.groups.toast = toast{text: "saved", level: toastOK}
 	m.form = nil
-	m.screen = screenGroups
+	m.backFromGroupChange(m.formReturnTo, back, "saved")
 	return nil
 }
 
 func (msg deleteGroupMsg) apply(m *appModel) tea.Cmd {
+	back := m.groupHostsPath()
 	if err := m.deleteGroup(msg.index); err != nil {
-		m.groups.toast = toast{text: err.Error(), level: toastErr}
+		m.toastOn(m.screen, toast{text: err.Error(), level: toastErr})
 		return nil
 	}
-	m.groups.toast = toast{text: "deleted", level: toastOK}
+	m.backFromGroupChange(m.screen, back, "deleted")
 	return nil
+}
+
+// groupHostsPath is the path of the group the group hosts screen shows, or
+// "" when it is closed.
+func (m *appModel) groupHostsPath() string {
+	if m.gh == nil {
+		return ""
+	}
+	return config.GroupPath(m.gh.group)
+}
+
+// backFromGroupChange shows s after the groups changed, with a toast that
+// says done. Group hosts is rebuilt on the group at path: a delete can move
+// its index, and its subgroups changed. A path that is gone shows Groups.
+func (m *appModel) backFromGroupChange(s screen, path, done string) {
+	if s == screenGroupHosts {
+		if i := config.FindGroup(m.opts.Inventory.Groups, path); i >= 0 {
+			m.reopenGroupHosts(i)
+		} else {
+			s = screenGroups
+		}
+	}
+	m.screen = s
+	m.toastOn(s, toast{text: done, level: toastOK})
 }
 
 // Group hosts and the host picker that adds to it.
@@ -136,6 +162,7 @@ func (msg openGroupHostsMsg) apply(m *appModel) tea.Cmd {
 	}
 	m.gh = newGroupHostsModel(m.opts, msg.index)
 	m.enter(screenGroupHosts)
+	m.gh.focusGroup(config.FindGroup(m.opts.Inventory.Groups, msg.from))
 	return nil
 }
 

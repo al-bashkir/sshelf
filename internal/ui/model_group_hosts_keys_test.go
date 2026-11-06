@@ -73,7 +73,7 @@ func TestGroupHostsKeysWithoutHost(t *testing.T) {
 }
 
 func TestGroupHostsListKeysTypeInSearch(t *testing.T) {
-	for _, k := range []string{"d", "a", "c", "e", "y", "o", "O", "q"} {
+	for _, k := range []string{"d", "a", "c", "e", "y", "o", "O", "q", "C", "n"} {
 		m := groupHostsScreen(0, nil)
 		on(m, "/", k)
 		if m.search.Value() != k || m.confirmRemove || len(m.execCmd) != 0 || !m.toast.empty() {
