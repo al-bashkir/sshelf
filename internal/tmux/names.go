@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"cmp"
 	"strings"
 
 	"github.com/al-bashkir/sshelf/internal/config"
@@ -18,10 +19,11 @@ func WindowName(host string) string {
 	return host[:min(len(host), 30)]
 }
 
-// GroupWindowName returns the window name for a set of hosts, preferring the group name when set.
+// GroupWindowName returns the window name for a set of hosts: the group's
+// window name, else the group name, else the first host.
 func GroupWindowName(hosts []string, group *config.Group) string {
 	if group != nil {
-		if n := strings.TrimSpace(group.Name); n != "" {
+		if n := cmp.Or(strings.TrimSpace(group.WindowName), strings.TrimSpace(group.Name)); n != "" {
 			return n
 		}
 	}

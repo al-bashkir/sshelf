@@ -121,6 +121,20 @@ func TestSaveInventoryThenLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadInventoryReadsGroupWindowName(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "hosts.toml")
+	if err := os.WriteFile(p, []byte("[[groups]]\nname = \"prod\"\nwindow_name = \"PROD\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inv, _, err := LoadInventory(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := inv.Groups[0].WindowName; got != "PROD" {
+		t.Fatalf("window_name loaded as %q, want PROD", got)
+	}
+}
+
 func TestMigrateOldConfig(t *testing.T) {
 	d := t.TempDir()
 	cfgPath := filepath.Join(d, "config.toml")

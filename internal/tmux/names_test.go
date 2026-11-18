@@ -32,6 +32,8 @@ func TestGroupWindowName(t *testing.T) {
 		group *config.Group
 		want  string
 	}{
+		{"window name wins", []string{"h1"}, &config.Group{Name: "prod", WindowName: " PROD db "}, "PROD db"},
+		{"blank window name", []string{"h1"}, &config.Group{Name: "prod", WindowName: " "}, "prod"},
 		{"group name wins", []string{"h1"}, &config.Group{Name: " prod "}, "prod"},
 		{"blank group name", []string{"h1", "h2"}, &config.Group{Name: " "}, "h1"},
 		{"nil group", []string{"[h1]:22"}, nil, "h1_22"},

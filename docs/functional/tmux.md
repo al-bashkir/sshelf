@@ -23,6 +23,11 @@ One window with panes:
 - Opens a single tmux window and splits panes for each host.
 - Applies layout/sync and pane border settings from defaults/group.
 
+Window name (inside tmux):
+
+- Group connection: the group `window_name`, else the group name.
+- Otherwise: the first host, with `[`, `]` removed, `:` changed to `_`, cut to 30 characters.
+
 Reconnect on lost connection (all tmux modes):
 
 - tmux runs each ssh through the hidden wrapper `sshelf __pane HOST -- SSH_ARGV...`.

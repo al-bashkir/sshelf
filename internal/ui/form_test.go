@@ -37,6 +37,22 @@ func TestGroupFormKeepsExtraArgsWithSpaces(t *testing.T) {
 	}
 }
 
+func TestGroupFormEditsWindowName(t *testing.T) {
+	base := config.Group{Name: "prod", WindowName: "PROD"}
+	v := groupToValues(base)
+	if v["window_name"] != "PROD" {
+		t.Fatalf("form shows window name %q, want PROD", v["window_name"])
+	}
+	v["window_name"] = " prod db "
+	g, err := applyGroupValues(v, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.WindowName != "prod db" {
+		t.Fatalf("saved window name %q, want %q", g.WindowName, "prod db")
+	}
+}
+
 func TestDefaultsFormKeepsExtraArgsWithSpaces(t *testing.T) {
 	base := config.DefaultConfig().Defaults
 	base.ExtraArgs = proxyArgs

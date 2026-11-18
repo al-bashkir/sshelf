@@ -92,8 +92,9 @@ type Group struct {
 	PaneSync      string   `toml:"pane_sync"`
 	PaneBorderFmt string   `toml:"pane_border_format"`
 	PaneBorderPos string   `toml:"pane_border_status"`
-	Tmux          string   `toml:"tmux"`      // optional override
-	OpenMode      string   `toml:"open_mode"` // optional override
+	Tmux          string   `toml:"tmux"`                  // optional override
+	OpenMode      string   `toml:"open_mode"`             // optional override
+	WindowName    string   `toml:"window_name,omitempty"` // tmux window name; "" uses Name. Not inherited, like Name
 	Hosts         []string `toml:"hosts"`
 }
 

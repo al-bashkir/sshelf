@@ -58,7 +58,8 @@ func TestParentChoices(t *testing.T) {
 func full(name, tag string) Group {
 	return Group{Name: name, User: "u" + tag, Port: len(tag), IdentityFile: "i" + tag, ExtraArgs: []string{"-" + tag},
 		RemoteCommand: "r" + tag, PaneSplit: "s" + tag, PaneLayout: "l" + tag, PaneSync: "y" + tag,
-		PaneBorderFmt: "f" + tag, PaneBorderPos: "b" + tag, Tmux: "t" + tag, OpenMode: "o" + tag, Hosts: []string{"h" + tag}}
+		PaneBorderFmt: "f" + tag, PaneBorderPos: "b" + tag, Tmux: "t" + tag, OpenMode: "o" + tag, WindowName: "w" + tag,
+		Hosts: []string{"h" + tag}}
 }
 
 func TestResolveGroupEverySetting(t *testing.T) {
@@ -66,7 +67,8 @@ func TestResolveGroupEverySetting(t *testing.T) {
 	t.Run("an empty setting inherits", func(t *testing.T) {
 		child := Group{Name: "c", Parent: "p", Hosts: []string{"c1"}}
 		want := parent
-		want.Name, want.Parent, want.Hosts = "c", "p", []string{"c1"}
+		// the window name stands for the group, like its name: a subgroup without one uses its own name
+		want.Name, want.Parent, want.Hosts, want.WindowName = "c", "p", []string{"c1"}, ""
 		if got := ResolveGroup([]Group{parent, child}, child); !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %+v\nwant %+v", got, want)
 		}

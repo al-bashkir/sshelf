@@ -53,6 +53,8 @@ func groupSchema(defs config.Defaults, parents []fieldOption) formSchema {
 					Options: optsInherit("auto", "current", "tmux-window", "tmux-pane")},
 				{Key: "tmux", Label: "Tmux", Kind: fieldPicker,
 					Options: optsInherit("auto", "force", "never")},
+				{Key: "window_name", Label: "Window name", Kind: fieldText,
+					Placeholder: "group name", CharLimit: 128},
 			}},
 			{Key: "panes", Label: "Panes", Fields: []fieldDef{
 				{Key: "pane_split", Label: "Pane split", Kind: fieldPicker,
@@ -88,6 +90,7 @@ func groupToValues(g config.Group) map[string]string {
 		"remote_cmd":  strings.TrimSpace(g.RemoteCommand),
 		"open_mode":   g.OpenMode,
 		"tmux":        g.Tmux,
+		"window_name": strings.TrimSpace(g.WindowName),
 		"pane_split":  g.PaneSplit,
 		"pane_layout": g.PaneLayout,
 		"pane_sync":   g.PaneSync,
@@ -106,6 +109,7 @@ func applyGroupValues(values map[string]string, base config.Group) (config.Group
 	g.PaneBorderFmt = strings.TrimSpace(values["border_fmt"])
 	g.OpenMode = values["open_mode"]
 	g.Tmux = values["tmux"]
+	g.WindowName = strings.TrimSpace(values["window_name"])
 	g.PaneSplit = values["pane_split"]
 	g.PaneLayout = values["pane_layout"]
 	g.PaneSync = values["pane_sync"]

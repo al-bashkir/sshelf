@@ -84,6 +84,7 @@ pane_border_status = ""
 
 tmux = ""             # optional override
 open_mode = "tmux-window"
+window_name = ""      # optional tmux window name; empty uses the group name
 
 hosts = [
   "db01.prod.example.com",
@@ -101,7 +102,7 @@ Nested groups:
 
 - A group with `parent = "<path>"` is a subgroup of the group at that path. A path is the group names from the top level down, joined by `/` (`prod/web`). A group has at most one parent.
 - A name must be unique only among the groups in the same parent: `prod/web` and `stage/web` can both exist. The CLI (`connect group`, `list groups`, completion) and the group pickers use the path.
-- A subgroup inherits each setting that it leaves empty from its nearest ancestor that sets it.
+- A subgroup inherits each setting that it leaves empty from its nearest ancestor that sets it. `window_name` is not inherited: a subgroup without one uses its own name.
 - Connecting to a group opens its own hosts and the hosts of all its subgroups, each host once.
 - Through a parent group, each host uses the settings of the first group in tree order (the group itself first) that lists it.
 - Load and save refuse a parent path that does not exist, and a path that two groups use.
