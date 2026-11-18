@@ -64,6 +64,9 @@ install -Dpm 0644 _sshelf %{buildroot}%{_datadir}/zsh/site-functions/_sshelf
 %{_datadir}/zsh/site-functions/_sshelf
 
 %changelog
+* Wed Nov 18 2026 Al Bashkir <41126916+al-bashkir@users.noreply.github.com> - 0.3.0-1
+- Set a tmux window name for a group with window_name; empty uses the group name
+
 * Fri Nov 06 2026 Al Bashkir <41126916+al-bashkir@users.noreply.github.com> - 0.2.0-1
 - Let a group sit inside another group; know a group by its path, such as prod/web
 - Connect, list and complete groups by path on the command line
