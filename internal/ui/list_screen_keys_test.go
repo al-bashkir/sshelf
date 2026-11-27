@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -29,6 +31,38 @@ func TestConnectQuestionTakesEveryKey(t *testing.T) {
 	screenShows(t, m, []string{"Connect 3 hosts?"})
 	on(m, "y")
 	screenShows(t, m, nil, "Connect 3 hosts?")
+}
+
+// The connect question offers w: the hosts fill windows of at most
+// threshold panes, instead of one window with all of them.
+func TestConnectQuestionSplitsHostsAcrossWindows(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in new-window) echo '@1 %1';; split-window) echo '%2';; esac\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o700); err != nil { // #nosec G306 -- test stub must be executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TMUX", "fake")
+
+	for _, c := range []struct{ key, want string }{
+		{"y", "opened 3 in one window"},
+		{"w", "opened 3 in 2 windows"},
+	} {
+		m := hostsScreen(func(o *Options) { o.Config.Defaults.ConnectConfirmThreshold = 2 })
+		on(m, "ctrl+a", "enter")
+		screenShows(t, m, []string{"Connect 3 hosts?", "w 2 per window"})
+		msg, _ := msgOf(on(m, c.key)).(toastMsg)
+		if msg.text != c.want {
+			t.Errorf("%s: toast %q, want %q", c.key, msg.text, c.want)
+		}
+	}
+
+	// At the threshold there is no question, and all hosts share one window.
+	m := hostsScreen(func(o *Options) { o.Config.Defaults.ConnectConfirmThreshold = 3 })
+	msg, _ := msgOf(on(m, "ctrl+a", "enter")).(toastMsg)
+	if want := "opened 3 in one window"; msg.text != want {
+		t.Errorf("no question: toast %q, want %q", msg.text, want)
+	}
 }
 
 func TestConnectAsksOnlyAboveTheThreshold(t *testing.T) {

@@ -204,33 +204,6 @@ func handleConfirmQuit(
 	}
 }
 
-// handleConfirmConnect processes a key when the connect-confirm dialog is shown.
-// Returns (true, cmd) if the key was consumed, (false, nil) otherwise.
-func handleConfirmConnect(
-	msg tea.KeyMsg,
-	confirmConnect *bool,
-	pendingFn *func() tea.Cmd,
-	t *toast,
-) (handled bool, cmd tea.Cmd) {
-	if !*confirmConnect {
-		return false, nil
-	}
-	switch msg.String() {
-	case "y", "Y", "enter":
-		*confirmConnect = false
-		fn := *pendingFn // connect sets it with confirmConnect
-		*pendingFn = nil
-		return true, fn()
-	case "n", "N", "esc":
-		*confirmConnect = false
-		*pendingFn = nil
-		*t = toast{}
-		return true, nil
-	default:
-		return true, nil
-	}
-}
-
 func handleVimListNav(msg tea.KeyMsg, l *list.Model, pendingG *bool) bool {
 	switch msg.String() {
 	case "g":

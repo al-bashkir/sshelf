@@ -70,7 +70,7 @@ func (m *groupHostsModel) overlayKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case m.confirmDelete:
 		return m.deleteKey(msg, &m.toast), true
 	}
-	if handled, cmd := handleConfirmConnect(msg, &m.confirmConnect, &m.pendingConnectFn, &m.toast); handled {
+	if handled, cmd := m.handleConfirmConnect(msg); handled {
 		return cmd, true
 	}
 	return nil, m.focus == focusList && handleVimListNav(msg, &m.list, &m.navPendingG)

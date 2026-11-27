@@ -142,8 +142,8 @@ func TestGroupHostsConnectsASubgroupRow(t *testing.T) {
 	t.Run("C on a host row connects the whole group", func(t *testing.T) {
 		m := subgroups()
 		on(m, "j", "j", "C")
-		if !m.confirmConnect || m.confirmConnectCount != 6 {
-			t.Fatalf("confirm=%v count=%d, want a confirm for prod's 6 hosts", m.confirmConnect, m.confirmConnectCount)
+		if !m.confirmConnect || len(m.confirmConnectHosts) != 6 {
+			t.Fatalf("confirm=%v count=%d, want a confirm for prod's 6 hosts", m.confirmConnect, len(m.confirmConnectHosts))
 		}
 	})
 	t.Run("o on a group row opens that group in panes", func(t *testing.T) {

@@ -95,7 +95,7 @@ func (s *listScreen) overlayView(helpTitle string, help func() helpMap, cmdHint 
 	case s.cmdPrompt:
 		return renderCmdPromptModal(s.width, s.height, s.cmdPromptCrumb, cmdHint, s.cmdInput), true
 	case s.confirmConnect:
-		box := connectConfirmBox(max(0, s.width-4), s.confirmConnectCount, s.confirmConnectHosts)
+		box := connectConfirmBox(max(0, s.width-4), s.confirmConnectHosts, s.confirmConnectPerWindow)
 		return lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, box), true
 	}
 	return "", false

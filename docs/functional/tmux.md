@@ -22,6 +22,7 @@ One window with panes:
 
 - Opens a single tmux window and splits panes for each host.
 - Applies layout/sync and pane border settings from defaults/group.
+- From the TUI connect confirmation, `w` splits the hosts across several such windows, at most `connect_confirm_threshold` panes each. Each window is named as above from its own hosts.
 
 Window name (inside tmux):
 

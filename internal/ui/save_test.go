@@ -114,8 +114,8 @@ func TestCustomHostConnectAboveThresholdAsksFirst(t *testing.T) {
 
 	m.Update(customHostConnectMsg{returnTo: screenHosts, groupIndex: -1, hosts: many})
 
-	if !m.hosts.confirmConnect || m.hosts.confirmConnectCount != len(many) {
-		t.Fatalf("confirm=%v count=%d, want a confirm for %d hosts", m.hosts.confirmConnect, m.hosts.confirmConnectCount, len(many))
+	if !m.hosts.confirmConnect || len(m.hosts.confirmConnectHosts) != len(many) {
+		t.Fatalf("confirm=%v count=%d, want a confirm for %d hosts", m.hosts.confirmConnect, len(m.hosts.confirmConnectHosts), len(many))
 	}
 	if m.screen != screenHosts {
 		t.Fatalf("screen=%v, want the Hosts screen that shows the confirm", m.screen)

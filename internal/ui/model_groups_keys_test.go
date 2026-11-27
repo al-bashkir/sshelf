@@ -168,8 +168,8 @@ func TestGroupsConnect(t *testing.T) {
 	t.Run("above the threshold asks first", func(t *testing.T) {
 		m := groupsScreen(func(o *Options) { o.Config.Defaults.ConnectConfirmThreshold = 1 })
 		on(m, "C")
-		if !m.confirmConnect || m.confirmConnectCount != 2 {
-			t.Fatalf("confirm=%v count=%d, want a confirm for 2 hosts", m.confirmConnect, m.confirmConnectCount)
+		if !m.confirmConnect || len(m.confirmConnectHosts) != 2 {
+			t.Fatalf("confirm=%v count=%d, want a confirm for 2 hosts", m.confirmConnect, len(m.confirmConnectHosts))
 		}
 		if cmd := on(m, "n"); cmd != nil || m.confirmConnect {
 			t.Fatal("n did not cancel the connect")

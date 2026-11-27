@@ -67,3 +67,4 @@ Connect confirmation:
 
 - When connecting to more than `connect_confirm_threshold` hosts at once, a confirmation dialog is shown listing the hosts.
 - Default threshold is 5. Set to 0 to disable.
+- Keys: `y`/`Enter` connects as usual, `w` opens the hosts in several tmux windows with at most threshold panes each, `n`/`Esc` cancels.

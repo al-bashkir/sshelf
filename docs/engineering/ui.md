@@ -183,6 +183,7 @@ The router's `View()` is responsible for centering app-level modal screens.
 - Connect confirmation modal:
   - `confirmConnect` flag on list models; shown when connecting to more than `connect_confirm_threshold` hosts.
   - Implemented in `internal/ui/confirm_modal.go` (`connectConfirmBox`).
+  - `pendingConnectFn(maxPanes)` runs the deferred connect; `w` passes `confirmConnectPerWindow`, which caps the panes in each tmux window (`connect.Open` `maxPanes`).
 
 ## Exec and quit flow
 

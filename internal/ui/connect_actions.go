@@ -17,10 +17,36 @@ type connectActions struct {
 	execCmd  []string
 	quitting bool
 
-	confirmConnect      bool
-	confirmConnectCount int
-	confirmConnectHosts []string
-	pendingConnectFn    func() tea.Cmd
+	confirmConnect          bool
+	confirmConnectHosts     []string
+	confirmConnectPerWindow int
+	// pendingConnectFn connects the confirmed hosts, maxPanes per tmux
+	// window at most (0 = no limit).
+	pendingConnectFn func(maxPanes int) tea.Cmd
+}
+
+// handleConfirmConnect processes a key when the connect-confirm dialog is shown.
+// Returns (true, cmd) if the key was consumed, (false, nil) otherwise.
+func (c *connectActions) handleConfirmConnect(msg tea.KeyMsg) (handled bool, cmd tea.Cmd) {
+	if !c.confirmConnect {
+		return false, nil
+	}
+	maxPanes := 0
+	switch msg.String() {
+	case "w", "W":
+		maxPanes = c.confirmConnectPerWindow
+		fallthrough
+	case "y", "Y", "enter":
+		c.confirmConnect = false
+		fn := c.pendingConnectFn // connect sets it with confirmConnect
+		c.pendingConnectFn = nil
+		return true, fn(maxPanes)
+	case "n", "N", "esc":
+		c.confirmConnect = false
+		c.pendingConnectFn = nil
+		c.toast = toast{}
+	}
+	return true, nil
 }
 
 // IsQuitting and ExecCmd make every list screen an exitState, so the app
@@ -28,20 +54,26 @@ type connectActions struct {
 func (c *connectActions) IsQuitting() bool  { return c.quitting }
 func (c *connectActions) ExecCmd() []string { return c.execCmd }
 
-// askBeforeConnect reports whether connecting n hosts needs a yes first:
-// above the threshold, 5 when it is unset (negative), never when it is 0.
-func askBeforeConnect(d config.Defaults, n int) bool {
-	t := d.ConnectConfirmThreshold
-	if t < 0 {
-		t = 5
+// confirmThreshold is the connect-confirm threshold, 5 when it is unset (negative).
+func confirmThreshold(d config.Defaults) int {
+	if d.ConnectConfirmThreshold < 0 {
+		return 5
 	}
+	return d.ConnectConfirmThreshold
+}
+
+// askBeforeConnect reports whether connecting n hosts needs a yes first:
+// above the threshold, never when it is 0.
+func askBeforeConnect(d config.Defaults, n int) bool {
+	t := confirmThreshold(d)
 	return t > 0 && n > t
 }
 
 // connect dispatches hosts. oneWindow forces every host into a single tmux
 // window of panes; remoteCmd, when set, runs on the remote and keeps the
 // session open. Above the confirm threshold the dispatch is deferred until
-// the user answers the confirm dialog.
+// the user answers the confirm dialog, which can also split the hosts into
+// windows of threshold panes each.
 func (c *connectActions) connect(hosts []string, opts Options, group *config.Group, oneWindow bool, remoteCmd string) tea.Cmd {
 	if len(hosts) == 0 {
 		c.toast = toast{text: "no host selected", level: toastWarn}
@@ -57,14 +89,14 @@ func (c *connectActions) connect(hosts []string, opts Options, group *config.Gro
 		group = &g
 	}
 	defaults := opts.Config.Defaults
-	doConnect := func() tea.Cmd {
+	doConnect := func(maxPanes int) tea.Cmd {
 		mode, inTmux := connect.Mode(defaults, group, opts.NoTmux)
 		if oneWindow {
 			mode = tmx.OpenPane
 		}
 		sshCmds := connect.BuildCommands(hosts, defaults, opts.Inventory, group, remoteCmdModifier(remoteCmd))
 
-		res, cmd := dispatchConnect(hosts, sshCmds, defaults, group, mode, inTmux)
+		res, cmd := dispatchConnect(hosts, sshCmds, defaults, group, mode, inTmux, maxPanes)
 		if !res.toast.empty() {
 			c.toast = res.toast
 		}
@@ -77,12 +109,12 @@ func (c *connectActions) connect(hosts []string, opts Options, group *config.Gro
 
 	if askBeforeConnect(defaults, len(hosts)) {
 		c.confirmConnect = true
-		c.confirmConnectCount = len(hosts)
 		c.confirmConnectHosts = hosts
+		c.confirmConnectPerWindow = confirmThreshold(defaults)
 		c.pendingConnectFn = doConnect
 		return nil
 	}
-	return doConnect()
+	return doConnect(0)
 }
 
 // connectSameWindow replaces the TUI with a single ssh session in the current pane.

@@ -28,9 +28,10 @@ func dispatchConnect(
 	group *config.Group,
 	mode tmx.OpenMode,
 	inTmux bool,
+	maxPanes int,
 ) (result dispatchResult, cmd tea.Cmd) {
 	if !connect.NeedsTmux(mode, inTmux) {
-		execCmd, _, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux, 0)
+		execCmd, _, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux, maxPanes)
 		if err != nil {
 			return dispatchResult{toast: toast{text: err.Error(), level: toastWarn}}, nil
 		}
@@ -38,7 +39,7 @@ func dispatchConnect(
 	}
 
 	return dispatchResult{}, func() tea.Msg {
-		_, msg, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux, 0)
+		_, msg, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux, maxPanes)
 		if err != nil {
 			return toastMsg{text: err.Error(), level: toastErr}
 		}
