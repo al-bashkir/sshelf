@@ -64,6 +64,9 @@ install -Dpm 0644 _sshelf %{buildroot}%{_datadir}/zsh/site-functions/_sshelf
 %{_datadir}/zsh/site-functions/_sshelf
 
 %changelog
+* Fri Nov 27 2026 Al Bashkir <41126916+al-bashkir@users.noreply.github.com> - 0.4.0-1
+- Press w in the connect question to open the hosts in several tmux windows, at most connect_confirm_threshold panes each
+
 * Wed Nov 18 2026 Al Bashkir <41126916+al-bashkir@users.noreply.github.com> - 0.3.0-1
 - Set a tmux window name for a group with window_name; empty uses the group name
 
