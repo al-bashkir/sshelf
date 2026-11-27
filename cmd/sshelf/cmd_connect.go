@@ -46,7 +46,7 @@ func (c cli) open(hosts []string, cfg config.Config, inv config.Inventory, group
 	sshCmds := connect.BuildCommands(hosts, cfg.Defaults, inv, group, nil)
 	mode, inTmux := connect.Mode(cfg.Defaults, group, noTmux)
 
-	execCmd, msg, err := connect.Open(hosts, sshCmds, cfg.Defaults, group, mode, inTmux)
+	execCmd, msg, err := connect.Open(hosts, sshCmds, cfg.Defaults, group, mode, inTmux, 0)
 	if err != nil {
 		return err
 	}

@@ -65,8 +65,10 @@ func NeedsTmux(mode tmx.OpenMode, inTmux bool) bool {
 
 // Open dispatches sshCmds according to mode. Exactly one of the results is
 // meaningful: execCmd is an argv the caller must exec in place of the current
-// process, msg describes what was opened in tmux.
-func Open(hosts []string, sshCmds [][]string, defaults config.Defaults, group *config.Group, mode tmx.OpenMode, inTmux bool) (execCmd []string, msg string, err error) {
+// process, msg describes what was opened in tmux. maxPanes > 0 caps the panes
+// per window, so the hosts fill as many windows as they need; 0 puts them all
+// in one window.
+func Open(hosts []string, sshCmds [][]string, defaults config.Defaults, group *config.Group, mode tmx.OpenMode, inTmux bool, maxPanes int) (execCmd []string, msg string, err error) {
 	if mode == tmx.OpenCurrent {
 		if len(sshCmds) > 1 {
 			return nil, "", fmt.Errorf("multi-host requires tmux (set open_mode to tmux-window or tmux-pane)")
@@ -83,7 +85,7 @@ func Open(hosts []string, sshCmds [][]string, defaults config.Defaults, group *c
 	}
 
 	if usesOneWindow(mode, len(sshCmds)) {
-		msg, err = openOneWindow(hosts, sshCmds, defaults, group)
+		msg, err = openPaneWindows(hosts, sshCmds, defaults, group, maxPanes)
 	} else {
 		msg, err = openWindows(hosts, sshCmds, group)
 	}
@@ -96,10 +98,30 @@ func usesOneWindow(mode tmx.OpenMode, n int) bool {
 	return mode == tmx.OpenPane || (mode == tmx.OpenWindow && n > 1)
 }
 
+// openPaneWindows opens the hosts as panes, maxPanes per window at most
+// (all in one window when maxPanes <= 0).
+func openPaneWindows(hosts []string, sshCmds [][]string, defaults config.Defaults, group *config.Group, maxPanes int) (string, error) {
+	if maxPanes <= 0 {
+		maxPanes = len(sshCmds)
+	}
+	windows := 0
+	for start := 0; start < len(sshCmds); start += maxPanes {
+		end := min(start+maxPanes, len(sshCmds))
+		if err := openOneWindow(hosts[start:end], sshCmds[start:end], defaults, group); err != nil {
+			return "", err
+		}
+		windows++
+	}
+	if windows == 1 {
+		return fmt.Sprintf("opened %d in one window", len(sshCmds)), nil
+	}
+	return fmt.Sprintf("opened %d in %d windows", len(sshCmds), windows), nil
+}
+
 // openOneWindow opens all hosts as panes in a single new tmux window.
-func openOneWindow(hosts []string, sshCmds [][]string, defaults config.Defaults, group *config.Group) (string, error) {
+func openOneWindow(hosts []string, sshCmds [][]string, defaults config.Defaults, group *config.Group) error {
 	ps := tmx.ResolvePaneSettings(defaults, group, len(sshCmds))
-	if err := tmx.OpenOneWindow(sshCmds, tmx.OneWindowOpts{
+	return tmx.OpenOneWindow(sshCmds, tmx.OneWindowOpts{
 		WindowName:       tmx.GroupWindowName(hosts, group),
 		PaneTitles:       hosts,
 		SplitFlag:        ps.SplitFlag,
@@ -107,10 +129,7 @@ func openOneWindow(hosts []string, sshCmds [][]string, defaults config.Defaults,
 		SyncPanes:        ps.SyncPanes,
 		PaneBorderFormat: ps.BorderFormat,
 		PaneBorderStatus: ps.BorderStatus,
-	}); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("opened %d in one window", len(sshCmds)), nil
+	})
 }
 
 // openWindows opens one tmux window per host.

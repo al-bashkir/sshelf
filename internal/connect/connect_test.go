@@ -12,7 +12,7 @@ import (
 
 func TestOpenCurrentExecsSSHDirectly(t *testing.T) {
 	ssh := []string{"ssh", "web01"}
-	got, _, err := Open([]string{"web01"}, [][]string{ssh}, config.Defaults{}, nil, tmx.OpenCurrent, false)
+	got, _, err := Open([]string{"web01"}, [][]string{ssh}, config.Defaults{}, nil, tmx.OpenCurrent, false, 0)
 	if err != nil || !reflect.DeepEqual(got, ssh) {
 		t.Fatalf("got=%v err=%v want=%v", got, err, ssh)
 	}
@@ -23,7 +23,7 @@ func TestOpenTmuxWrapsSSHForReconnect(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
-	got, _, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{TmuxSession: "s"}, nil, tmx.OpenWindow, false)
+	got, _, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{TmuxSession: "s"}, nil, tmx.OpenWindow, false, 0)
 	want := []string{"tmux", "new-session", "-s", "s", "--", exe, "__pane", "web01", "--", "ssh", "web01"}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got=%v err=%v want=%v", got, err, want)
@@ -33,7 +33,7 @@ func TestOpenTmuxWrapsSSHForReconnect(t *testing.T) {
 func TestOpenMultiHostNeedsTmux(t *testing.T) {
 	cmds := [][]string{{"ssh", "a"}, {"ssh", "b"}}
 	for _, mode := range []tmx.OpenMode{tmx.OpenCurrent, tmx.OpenWindow, tmx.OpenPane} {
-		if _, _, err := Open([]string{"a", "b"}, cmds, config.Defaults{}, nil, mode, false); err == nil {
+		if _, _, err := Open([]string{"a", "b"}, cmds, config.Defaults{}, nil, mode, false, 0); err == nil {
 			t.Errorf("mode=%s outside tmux: want error", mode)
 		}
 	}
@@ -58,7 +58,7 @@ func TestUsesOneWindow(t *testing.T) {
 }
 
 func TestTmuxIsUnreachableFromTests(t *testing.T) {
-	_, _, err := Open([]string{"a", "b"}, [][]string{{"ssh", "a"}, {"ssh", "b"}}, config.Defaults{}, nil, tmx.OpenPane, true)
+	_, _, err := Open([]string{"a", "b"}, [][]string{{"ssh", "a"}, {"ssh", "b"}}, config.Defaults{}, nil, tmx.OpenPane, true, 0)
 	if err == nil {
 		t.Fatal("Open reached a tmux server from tests; panes may have been created")
 	}

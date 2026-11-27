@@ -74,7 +74,7 @@ func fakeTmux(t *testing.T, code string) string {
 
 func TestOpenSingleWindowNamesWindowAfterHost(t *testing.T) {
 	log := fakeTmux(t, "0")
-	_, msg, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{}, nil, tmx.OpenWindow, true)
+	_, msg, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{}, nil, tmx.OpenWindow, true, 0)
 	if err != nil || msg != "opened 1" {
 		t.Fatalf("msg=%q err=%v", msg, err)
 	}
@@ -91,7 +91,7 @@ func TestOpenSingleWindowNamesWindowAfterHost(t *testing.T) {
 func TestOpenSingleWindowGroupNameWins(t *testing.T) {
 	log := fakeTmux(t, "0")
 	g := &config.Group{Name: "prod"}
-	if _, _, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{}, g, tmx.OpenWindow, true); err != nil {
+	if _, _, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{}, g, tmx.OpenWindow, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(log)
@@ -102,7 +102,7 @@ func TestOpenSingleWindowGroupNameWins(t *testing.T) {
 
 func TestOpenSingleWindowTmuxFailure(t *testing.T) {
 	fakeTmux(t, "1")
-	_, _, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{}, nil, tmx.OpenWindow, true)
+	_, _, err := Open([]string{"web01"}, [][]string{{"ssh", "web01"}}, config.Defaults{}, nil, tmx.OpenWindow, true, 0)
 	if err == nil || !strings.Contains(err.Error(), "tmux new-window") {
 		t.Fatalf("err=%v", err)
 	}
@@ -115,4 +115,47 @@ func slicesContain(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// fakeTmuxIDs is fakeTmux that also prints the window/pane ids that
+// new-window -P and split-window -P print, so OpenOneWindow can go on.
+func fakeTmuxIDs(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls")
+	script := "#!/bin/sh\necho \"$1\" >> '" + log + "'\n" +
+		"case \"$1\" in new-window) echo '@1 %1';; split-window) echo '%2';; esac\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o700); err != nil { // #nosec G306 -- test stub must be executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+func TestOpenSplitsPanesAcrossWindows(t *testing.T) {
+	hosts := []string{"a", "b", "c", "d", "e"}
+	cmds := [][]string{{"ssh", "a"}, {"ssh", "b"}, {"ssh", "c"}, {"ssh", "d"}, {"ssh", "e"}}
+	for _, tc := range []struct {
+		maxPanes, windows, splits int
+		msg                       string
+	}{
+		{0, 1, 4, "opened 5 in one window"},
+		{1, 5, 0, "opened 5 in 5 windows"},
+		{2, 3, 2, "opened 5 in 3 windows"},
+		{5, 1, 4, "opened 5 in one window"},
+	} {
+		log := fakeTmuxIDs(t)
+		_, msg, err := Open(hosts, cmds, config.Defaults{}, nil, tmx.OpenPane, true, tc.maxPanes)
+		if err != nil || msg != tc.msg {
+			t.Fatalf("maxPanes=%d: msg=%q err=%v", tc.maxPanes, msg, err)
+		}
+		data, _ := os.ReadFile(log)
+		calls := string(data)
+		if n := strings.Count(calls, "new-window\n"); n != tc.windows {
+			t.Errorf("maxPanes=%d: %d windows, want %d", tc.maxPanes, n, tc.windows)
+		}
+		if n := strings.Count(calls, "split-window\n"); n != tc.splits {
+			t.Errorf("maxPanes=%d: %d splits, want %d", tc.maxPanes, n, tc.splits)
+		}
+	}
 }

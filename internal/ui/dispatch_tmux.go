@@ -30,7 +30,7 @@ func dispatchConnect(
 	inTmux bool,
 ) (result dispatchResult, cmd tea.Cmd) {
 	if !connect.NeedsTmux(mode, inTmux) {
-		execCmd, _, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux)
+		execCmd, _, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux, 0)
 		if err != nil {
 			return dispatchResult{toast: toast{text: err.Error(), level: toastWarn}}, nil
 		}
@@ -38,7 +38,7 @@ func dispatchConnect(
 	}
 
 	return dispatchResult{}, func() tea.Msg {
-		_, msg, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux)
+		_, msg, err := connect.Open(hostsToOpen, sshCmds, defaults, group, mode, inTmux, 0)
 		if err != nil {
 			return toastMsg{text: err.Error(), level: toastErr}
 		}
